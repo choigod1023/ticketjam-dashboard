@@ -2,8 +2,9 @@ name: Refresh prices & publish
 
 on:
   schedule:
-    # Every 30 minutes. GitHub may delay scheduled runs under load.
-    - cron: '*/30 * * * *'
+    # Every 10 minutes. GitHub's floor is 5, but scheduled runs are delayed
+    # under load, so a tighter cron buys little and triples scraping load.
+    - cron: '*/10 * * * *'
   workflow_dispatch:
   push:
     branches: [master]

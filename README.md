@@ -11,7 +11,7 @@
 npm start           # http://localhost:4173
 ```
 
-첫 실행 시 수집 데이터가 없으면 자동으로 한 번 수집합니다(약 1분). 이후 30분마다 자동 갱신합니다.
+첫 실행 시 수집 데이터가 없으면 자동으로 한 번 수집합니다(약 1분). 이후 10분마다 자동 갱신합니다.
 수집만 한 번 돌리려면 `npm run refresh`.
 
 ## 여행 날짜 설정
@@ -39,7 +39,8 @@ npm start           # http://localhost:4173
 | `trip.start/end` | 수집할 경기 날짜 범위 (일본시간 기준, 양끝 포함) |
 | `regions` | 도도부현 필터. 도쿄만 보려면 `["東京都"]` |
 | `ticketCount` | `1` 이면 1매만 구매 가능한 매물로 한정. `null` 이면 전체 |
-| `refreshMinutes` | 자동 갱신 주기(분). 최소 5분 |
+| `refreshMinutes` | 로컬 서버의 갱신 주기(분). 배포본 주기는 워크플로 cron |
+| `scheduleTtlHours` | 경기 일정 캐시 수명(시간). 일정은 거의 안 바뀌므로 매번 받지 않는다 |
 | `maxPagesPerEvent` | 경기당 최대 수집 페이지(1페이지=100건) |
 | `requestDelayMs` | 요청 간격. 사이트 부담을 줄이려 요청을 직렬로 보냅니다 |
 
@@ -74,7 +75,7 @@ npm start           # http://localhost:4173
 
 ## 자동 갱신 & 배포
 
-`.github/workflows/refresh.yml` 이 **30분마다** 돌면서 가격을 수집하고, 결과(`data/latest.json`,
+`.github/workflows/refresh.yml` 이 **10분마다** 돌면서 가격을 수집하고, 결과(`data/latest.json`,
 `data/history.json`)를 저장소에 커밋한 뒤 GitHub Pages 로 배포합니다. 로컬에서 맥을 켜둘 필요가 없습니다.
 
 - 이력이 저장소에 쌓이므로 가격 추이가 배포본에서도 그대로 보입니다

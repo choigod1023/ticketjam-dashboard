@@ -24,9 +24,10 @@
     "buffaloes",
     "rakuteneagles"
   ],
-  "refreshMinutes": 30,
+  "refreshMinutes": 10,
   "maxPagesPerEvent": 3,
   "requestDelayMs": 700,
   "port": 4173,
-  "ticketCount": 1
+  "ticketCount": 1,
+  "scheduleTtlHours": 12
 }
