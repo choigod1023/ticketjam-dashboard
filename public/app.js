@@ -14,8 +14,13 @@ const JST = {
   }),
 };
 
-const dayKey = (iso) => iso.slice(0, 10);
-let state = { data: null, open: new Set(), timer: null };
+const state = {
+  data: null,
+  mode: 'one',        // 'one' = 1매 구매 가능한 매물만, 'all' = 전체
+  open: new Set(),
+  live: false,        // true when a local server is backing the page
+  timer: null,
+};
 
 /* ------------------------------------------------------------------ charts */
 
@@ -41,13 +46,13 @@ function niceScale(lo, hi, want = 4) {
   return { lo: start, hi: end, vals };
 }
 
-/**
- * Compact single-series trend line. No axes or legend — the card's own
- * "최저가" label names the series.
- */
-function sparkline(snapshots) {
+const series = (snap, mode) => snap[mode] ?? {};
+
+/** Compact single-series trend line — the card's "최저가" label names it. */
+function sparkline(snapshots, mode) {
   const w = 140, h = 38, pad = 3;
-  const vals = snapshots.map((s) => s.min);
+  const vals = snapshots.map((s) => series(s, mode).min).filter((v) => v != null);
+  if (vals.length < 2) return null;
   const lo = Math.min(...vals), hi = Math.max(...vals);
   const span = hi - lo || 1;
   const svg = mk('svg', { width: w, height: h, viewBox: `0 0 ${w} ${h}`, role: 'img' });
@@ -57,12 +62,10 @@ function sparkline(snapshots) {
     x: pad + (i * (w - pad * 2)) / Math.max(1, vals.length - 1),
     y: h - pad - ((v - lo) / span) * (h - pad * 2),
   }));
-
   svg.append(mk('path', {
     d: linePath(pts), fill: 'none', stroke: 'var(--series-1)',
     'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
   }));
-  // 2px surface ring keeps the end dot legible where it overlaps the line.
   const last = pts.at(-1);
   svg.append(mk('circle', {
     cx: last.x, cy: last.y, r: 3.5,
@@ -71,10 +74,8 @@ function sparkline(snapshots) {
   return svg;
 }
 
-/**
- * Full price-history chart: 최저가 + 중앙값 over time, with a hover crosshair.
- */
-function historyChart(snapshots) {
+/** Full price-history chart: 최저가 + 중앙값 over time, with a hover crosshair. */
+function historyChart(snapshots, mode) {
   const w = 1000, h = 260;
   const m = { t: 14, r: 20, b: 28, l: 64 };
   const iw = w - m.l - m.r, ih = h - m.t - m.b;
@@ -83,7 +84,11 @@ function historyChart(snapshots) {
   const t0 = times[0], t1 = times.at(-1);
   const tSpan = t1 - t0 || 1;
 
-  const all = snapshots.flatMap((s) => [s.min, s.median]).filter((v) => v != null);
+  const all = snapshots
+    .flatMap((s) => [series(s, mode).min, series(s, mode).median])
+    .filter((v) => v != null);
+  if (!all.length) return null;
+
   const rawLo = Math.min(...all), rawHi = Math.max(...all);
   const padY = (rawHi - rawLo) * 0.12 || Math.max(200, rawHi * 0.05);
   const scale = niceScale(Math.max(0, rawLo - padY), rawHi + padY);
@@ -101,15 +106,13 @@ function historyChart(snapshots) {
   // instead of letterboxing inside a fixed height.
   svg.style.cssText = 'width:100%;height:auto;min-width:520px;display:block';
 
-  // recessive gridlines + y ticks
   for (const v of scale.vals) {
     const y = Y(v);
     svg.append(mk('line', {
       x1: m.l, x2: m.l + iw, y1: y, y2: y, stroke: 'var(--grid)', 'stroke-width': 1,
     }));
     const lab = mk('text', {
-      x: m.l - 8, y: y + 4, 'text-anchor': 'end',
-      fill: 'var(--muted)', 'font-size': 11,
+      x: m.l - 8, y: y + 4, 'text-anchor': 'end', fill: 'var(--muted)', 'font-size': 11,
     });
     lab.textContent = yen(Math.round(v));
     svg.append(lab);
@@ -119,7 +122,6 @@ function historyChart(snapshots) {
     stroke: 'var(--axis)', 'stroke-width': 1,
   }));
 
-  // x labels: first and last only, so ticks never collide
   for (const [t, anchor] of [[t0, 'start'], [t1, 'end']]) {
     if (t0 === t1 && anchor === 'end') break;
     const lab = mk('text', {
@@ -129,14 +131,14 @@ function historyChart(snapshots) {
     svg.append(lab);
   }
 
-  const series = [
+  const defs = [
     { key: 'min', name: '최저가', color: 'var(--series-1)' },
     { key: 'median', name: '중앙값', color: 'var(--series-2)' },
   ];
 
-  for (const s of series) {
+  for (const s of defs) {
     const pts = snapshots
-      .map((snap, i) => ({ x: X(times[i]), y: Y(snap[s.key]), v: snap[s.key] }))
+      .map((snap, i) => ({ x: X(times[i]), y: Y(series(snap, mode)[s.key]), v: series(snap, mode)[s.key] }))
       .filter((p) => Number.isFinite(p.y));
     if (!pts.length) continue;
 
@@ -162,12 +164,11 @@ function historyChart(snapshots) {
     svg.append(lab);
   }
 
-  // hover crosshair
   const cross = mk('line', {
     y1: m.t, y2: m.t + ih, stroke: 'var(--axis)', 'stroke-width': 1, opacity: 0,
   });
   svg.append(cross);
-  const dots = series.map((s) => {
+  const dots = defs.map((s) => {
     const d = mk('circle', {
       r: 4.5, fill: s.color, stroke: 'var(--surface-1)', 'stroke-width': 2, opacity: 0,
     });
@@ -187,18 +188,18 @@ function historyChart(snapshots) {
     const snap = snapshots[best];
     const x = X(times[best]);
     cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('opacity', 1);
-    series.forEach((s, i) => {
+    defs.forEach((s, i) => {
+      const v = series(snap, mode)[s.key];
       dots[i].setAttribute('cx', x);
-      dots[i].setAttribute('cy', Y(snap[s.key]));
-      dots[i].setAttribute('opacity', Number.isFinite(snap[s.key]) ? 1 : 0);
+      dots[i].setAttribute('cy', Y(v));
+      dots[i].setAttribute('opacity', Number.isFinite(v) ? 1 : 0);
     });
     tip.innerHTML =
       `<div class="tt-t">${JST.stamp.format(new Date(snap.t))}</div>` +
-      series.map((s) =>
-        `<div class="tt-r"><span><span class="sw" style="background:${s.color};` +
-        `display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px"></span>` +
-        `${s.name}</span><b>${yen(snap[s.key])}</b></div>`).join('') +
-      `<div class="tt-r"><span>출품</span><b>${snap.count}건</b></div>`;
+      defs.map((s) =>
+        `<div class="tt-r"><span><span class="sw" style="background:${s.color}"></span>` +
+        `${s.name}</span><b>${yen(series(snap, mode)[s.key])}</b></div>`).join('') +
+      `<div class="tt-r"><span>매물</span><b>${series(snap, mode).count}건</b></div>`;
     tip.classList.add('on');
     tip.style.left = Math.min(ev.clientX + 14, innerWidth - 190) + 'px';
     tip.style.top = ev.clientY + 14 + 'px';
@@ -214,21 +215,22 @@ function historyChart(snapshots) {
 
 /* ------------------------------------------------------------------ render */
 
-function deltaNode(snaps) {
+function deltaNode(snaps, mode) {
+  const vals = snaps.map((s) => series(s, mode).min).filter((v) => v != null);
   const d = document.createElement('div');
-  if (snaps.length < 2) {
-    // Nothing to compare against yet; the sparkline slot carries the notice.
+  if (vals.length < 2) {
     d.className = 'delta flat';
     d.textContent = '';
     return d;
   }
-  const diff = snaps.at(-1).min - snaps.at(-2).min;
+  const diff = vals.at(-1) - vals.at(-2);
   d.className = 'delta ' + (diff < 0 ? 'down' : diff > 0 ? 'up' : 'flat');
   d.textContent = diff === 0 ? '변동 없음' : `${diff < 0 ? '▼' : '▲'} ${yen(Math.abs(diff))}`;
   return d;
 }
 
 function gameCard(g) {
+  const v = g[state.mode];
   const card = document.createElement('article');
   card.className = 'game';
 
@@ -239,17 +241,16 @@ function gameCard(g) {
       <div class="matchup">${g.name}<span class="badge">${g.region}</span></div>
       <div class="where">${JST.time.format(new Date(g.startDate))} · ${g.venue}</div>
     </div>
-    <div class="meta-num">출품 ${g.stats.count}건<br>중앙값 ${yen(g.stats.median)}</div>
+    <div class="meta-num">매물 ${v.stats.count}건<br>중앙값 ${yen(v.stats.median)}</div>
     <div class="price-block">
       <div class="k">최저가</div>
-      <div class="v">${yen(g.stats.min)}</div>
+      <div class="v">${yen(v.stats.min)}</div>
     </div>`;
+  head.querySelector('.price-block').append(deltaNode(g.history, state.mode));
 
-  head.querySelector('.price-block').append(deltaNode(g.history));
-
-  if (g.history.length >= 2) {
-    head.append(sparkline(g.history));
-  } else {
+  const spark = sparkline(g.history, state.mode);
+  if (spark) head.append(spark);
+  else {
     const ph = document.createElement('div');
     ph.className = 'spark-empty';
     ph.textContent = '추이 수집 중';
@@ -278,14 +279,15 @@ function gameCard(g) {
 
     const wrap = document.createElement('div');
     wrap.className = 'chart-wrap';
-    if (g.history.length) wrap.append(historyChart(g.history));
+    const chart = historyChart(g.history, state.mode);
+    if (chart) wrap.append(chart);
     body.append(wrap);
 
     const table = document.createElement('table');
     table.innerHTML =
       `<thead><tr><th class="num">가격</th><th class="num">매수</th>` +
       `<th>좌석</th><th>수령</th><th></th></tr></thead><tbody>` +
-      g.cheapest.slice(0, 15).map((l) => `
+      v.cheapest.slice(0, 15).map((l) => `
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
           <td class="num">${l.qty ?? '—'}</td>
@@ -297,7 +299,7 @@ function gameCard(g) {
     body.append(table);
 
     const link = document.createElement('p');
-    link.innerHTML = `<a href="${g.url}" target="_blank" rel="noopener">티켓잼에서 전체 ${g.stats.count}건 보기 →</a>`;
+    link.innerHTML = `<a href="${g.url}" target="_blank" rel="noopener">티켓잼에서 전체 보기 →</a>`;
     link.style.cssText = 'font-size:13px;margin:12px 0 0';
     body.append(link);
   };
@@ -319,65 +321,73 @@ function gameCard(g) {
   return card;
 }
 
-function render(data) {
-  state.data = data;
-  const games = data.games ?? [];
+/** Apply the browser-side filters to whatever was collected. */
+function visibleGames() {
+  const games = state.data?.games ?? [];
+  const start = el('#start').value;
+  const end = el('#end').value;
+  const regions = new Set(
+    [...document.querySelectorAll('.regions input[value]:checked')].map((b) => b.value),
+  );
+  return games.filter((g) => {
+    const day = g.startDate.slice(0, 10);
+    if (start && day < start) return false;
+    if (end && day > end) return false;
+    if (regions.size && !regions.has(g.region)) return false;
+    return g[state.mode].stats.count > 0;
+  });
+}
 
-  // controls reflect stored config
-  el('#start').value = data.config?.trip?.start ?? '';
-  el('#end').value = data.config?.trip?.end ?? '';
-  for (const box of document.querySelectorAll('.regions input[value]')) {
-    box.checked = (data.config?.regions ?? []).includes(box.value);
-  }
-  el('#one').checked = data.config?.ticketCount === 1;
+function render() {
+  const data = state.data;
+  if (!data) return;
+  const games = visibleGames();
 
-  // status line
   const st = el('#status');
   st.classList.toggle('busy', !!data.status?.running);
   const stamp = data.generatedAt ? JST.stamp.format(new Date(data.generatedAt)) : '없음';
   st.innerHTML =
-    `<span><span class="dot"></span>${data.status?.running ? '갱신 중…' : '대기 중'}</span>` +
-    `<span>최근 갱신 ${stamp} (JST)</span>` +
-    `<span>자동 갱신 ${data.config?.refreshMinutes ?? 30}분마다</span>`;
+    `<span><span class="dot"></span>${data.status?.running ? '갱신 중…' : (state.live ? '로컬 실행 중' : '자동 갱신본')}</span>` +
+    `<span>최근 수집 ${stamp} (JST)</span>` +
+    `<span>수집 범위 ${data.trip?.start ?? '?'} ~ ${data.trip?.end ?? '?'}</span>`;
 
-  // stat tiles
-  const mins = games.map((g) => g.stats.min).filter((v) => v != null);
+  const mins = games.map((g) => g[state.mode].stats.min).filter((v) => v != null);
   const tiles = [
-    ['경기 수', games.length, `${data.trip?.start ?? ''} ~ ${data.trip?.end ?? ''}`],
-    ['최저가', yen(mins.length ? Math.min(...mins) : null), '전체 경기 중'],
+    ['경기 수', games.length, state.mode === 'one' ? '1매 구매 가능' : '전체 매물'],
+    ['최저가', yen(mins.length ? Math.min(...mins) : null), '표시된 경기 중'],
     ['평균 최저가', yen(mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : null), '경기별 최저가 평균'],
-    ['총 출품', games.reduce((s, g) => s + g.stats.count, 0).toLocaleString(),
-      data.ticketCount === 1 ? '1매 구매 가능 · 자격제한 제외' : '자격제한 좌석 제외'],
+    ['총 매물', games.reduce((s, g) => s + g[state.mode].stats.count, 0).toLocaleString(), '자격제한 좌석 제외'],
   ];
   el('#tiles').innerHTML = tiles
     .map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`)
     .join('');
 
-  // games grouped by JST date
   const root = el('#games');
   root.innerHTML = '';
   if (!games.length) {
     root.innerHTML = `<div class="empty">${data.generatedAt
-      ? '이 기간·지역에는 등록된 경기가 없습니다. 날짜나 지역을 넓혀보세요.'
-      : '아직 수집된 데이터가 없습니다. “지금 갱신”을 눌러주세요.'}</div>`;
-  } else {
-    const byDay = new Map();
-    for (const g of games) {
-      const k = dayKey(g.startDate);
-      (byDay.get(k) ?? byDay.set(k, []).get(k)).push(g);
-    }
-    for (const [k, list] of [...byDay].sort()) {
-      const sec = document.createElement('section');
-      sec.className = 'day';
-      const h = document.createElement('h2');
-      h.textContent = `${JST.day.format(new Date(k + 'T12:00:00+09:00'))} · ${list.length}경기`;
-      sec.append(h);
-      const box = document.createElement('div');
-      box.className = 'games';
-      list.forEach((g) => box.append(gameCard(g)));
-      sec.append(box);
-      root.append(sec);
-    }
+      ? '조건에 맞는 경기가 없습니다. 날짜나 지역을 넓혀보세요.'
+      : '아직 수집된 데이터가 없습니다.'}</div>`;
+    return;
+  }
+
+  const byDay = new Map();
+  for (const g of games) {
+    const k = g.startDate.slice(0, 10);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(g);
+  }
+  for (const [k, list] of [...byDay].sort()) {
+    const sec = document.createElement('section');
+    sec.className = 'day';
+    const h = document.createElement('h2');
+    h.textContent = `${JST.day.format(new Date(k + 'T12:00:00+09:00'))} · ${list.length}경기`;
+    sec.append(h);
+    const box = document.createElement('div');
+    box.className = 'games';
+    list.forEach((g) => box.append(gameCard(g)));
+    sec.append(box);
+    root.append(sec);
   }
 
   el('#errors').innerHTML = (data.errors ?? []).length
@@ -387,33 +397,66 @@ function render(data) {
 
 /* ------------------------------------------------------------------- wiring */
 
-async function load() {
-  const res = await fetch('/api/data');
-  const data = await res.json();
-  render(data);
-  // While a refresh runs, poll faster so the page fills in as it finishes.
-  clearTimeout(state.timer);
-  state.timer = setTimeout(load, data.status?.running ? 3000 : 60_000);
+/** Prefer the local server; fall back to the statically published snapshot. */
+async function fetchData() {
+  try {
+    const res = await fetch('/api/data', { cache: 'no-store' });
+    if (res.ok) {
+      state.live = true;
+      return await res.json();
+    }
+  } catch {
+    // No server here — this is the static deployment.
+  }
+  state.live = false;
+  const res = await fetch('./data/latest.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('데이터를 불러오지 못했습니다');
+  return await res.json();
 }
+
+async function load() {
+  try {
+    state.data = await fetchData();
+  } catch (err) {
+    el('#games').innerHTML = `<div class="empty">${err.message}</div>`;
+    return;
+  }
+
+  // Default the date inputs to the collected range on first load only.
+  if (!el('#start').value) el('#start').value = state.data.trip?.start ?? '';
+  if (!el('#end').value) el('#end').value = state.data.trip?.end ?? '';
+  if (!document.querySelector('.regions input[value]:checked')) {
+    for (const box of document.querySelectorAll('.regions input[value]')) {
+      box.checked = (state.data.regions ?? []).includes(box.value);
+    }
+  }
+  el('#one').checked = state.mode === 'one';
+  el('#refresh').hidden = !state.live;
+
+  render();
+  clearTimeout(state.timer);
+  state.timer = setTimeout(load, state.data.status?.running ? 3000 : 300_000);
+}
+
+// Filters are pure view state — re-render immediately, no round trip.
+for (const sel of ['#start', '#end']) {
+  el(sel).addEventListener('change', render);
+}
+for (const box of document.querySelectorAll('.regions input[value]')) {
+  box.addEventListener('change', render);
+}
+el('#one').addEventListener('change', (e) => {
+  state.mode = e.target.checked ? 'one' : 'all';
+  render();
+});
 
 el('#refresh').addEventListener('click', async () => {
   el('#refresh').disabled = true;
-  await fetch('/api/refresh', { method: 'POST' });
-  setTimeout(() => { el('#refresh').disabled = false; load(); }, 600);
-});
-
-el('#apply').addEventListener('click', async () => {
-  const regions = [...document.querySelectorAll('.regions input[value]:checked')].map((b) => b.value);
-  await fetch('/api/config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      trip: { start: el('#start').value, end: el('#end').value },
-      regions,
-      ticketCount: el('#one').checked ? 1 : null,
-    }),
-  });
-  setTimeout(load, 600);
+  try {
+    await fetch('/api/refresh', { method: 'POST' });
+  } finally {
+    setTimeout(() => { el('#refresh').disabled = false; load(); }, 600);
+  }
 });
 
 load();

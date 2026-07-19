@@ -1,0 +1,66 @@
+name: Refresh prices & publish
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub may delay scheduled runs under load.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+# Only one refresh at a time; a queued run supersedes a pending one.
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Collect prices
+        run: node refresh-once.js
+
+      - name: Commit data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/latest.json data/history.json
+          if git diff --staged --quiet; then
+            echo "no change"
+          else
+            git commit -m "data: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
+            # The scheduled run races nothing but a manual push; rebase and retry once.
+            git pull --rebase --autostash origin master || true
+            git push origin HEAD:master
+          fi
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/data
+          cp -r public/* _site/
+          cp data/latest.json _site/data/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: refresh
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

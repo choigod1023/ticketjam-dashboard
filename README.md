@@ -8,7 +8,6 @@
 ## 실행
 
 ```bash
-cd ~/ticketjam-dashboard
 npm start           # http://localhost:4173
 ```
 
@@ -17,8 +16,9 @@ npm start           # http://localhost:4173
 
 ## 여행 날짜 설정
 
-현재 **2026-08-05 (수) 하루**, **1매 구매 가능한 매물만** 으로 맞춰져 있습니다.
-(도쿄 우에노 숙소는 8/2 15:00 체크인 ~ 8/6 11:00 체크아웃 — 날짜를 넓히려면 종료일만 바꾸면 됩니다.)
+`config.json` 의 `trip.start/end` 가 **수집 범위**입니다. 이 범위 안에서만 가격을 모읍니다.
+화면의 날짜·지역·"1매만" 필터는 **이미 수집된 데이터를 브라우저에서 걸러 보여주는 것**이라 즉시 반영되고,
+수집 범위 자체를 바꾸려면 `config.json` 을 고쳐 푸시해야 합니다.
 브라우저 상단의 **시작일 / 종료일 / 지역**을 고치고 **적용**을 누르면 `config.json` 에 저장되고 즉시 재수집합니다.
 직접 편집해도 됩니다:
 
@@ -72,6 +72,15 @@ npm start           # http://localhost:4173
 
 경기 ID는 사이트 전역에서 유일해서, 같은 경기가 홈/원정 양쪽 팀 페이지에 나와도 중복 없이 하나로 합쳐집니다.
 
+## 자동 갱신 & 배포
+
+`.github/workflows/refresh.yml` 이 **30분마다** 돌면서 가격을 수집하고, 결과(`data/latest.json`,
+`data/history.json`)를 저장소에 커밋한 뒤 GitHub Pages 로 배포합니다. 로컬에서 맥을 켜둘 필요가 없습니다.
+
+- 이력이 저장소에 쌓이므로 가격 추이가 배포본에서도 그대로 보입니다
+- 배포본은 읽기 전용입니다 — "지금 갱신" 버튼은 로컬 서버로 열었을 때만 나타납니다
+- 수동 실행: Actions 탭 → *Refresh prices & publish* → Run workflow
+
 ## 파일
 
 ```
@@ -83,7 +92,8 @@ lib/parse.js       JSON-LD / 출품 목록 파서
 lib/store.js       설정·이력 저장 (원자적 쓰기)
 lib/refresh.js     수집 파이프라인
 public/            대시보드 (정적 파일)
-data/              수집 결과 — history.json, latest.json
+data/              수집 결과 — history.json, latest.json (커밋됨)
+.github/workflows/ 30분 주기 수집 + Pages 배포
 ```
 
 ## 참고
