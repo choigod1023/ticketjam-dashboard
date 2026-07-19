@@ -17,6 +17,7 @@ const JST = {
 const state = {
   data: null,
   mode: 'one',        // 'one' = 1매 구매 가능한 매물만, 'all' = 전체
+  sort: 'price',      // 'price' | 'area'
   open: new Set(),
   live: false,        // true when a local server is backing the page
   timer: null,
@@ -47,6 +48,16 @@ function niceScale(lo, hi, want = 4) {
 }
 
 const series = (snap, mode) => snap[mode] ?? {};
+
+/** Listings sort — by price, or grouped by seating area then price. */
+function sortListings(list) {
+  const copy = [...list];
+  if (state.sort === 'area') {
+    return copy.sort((a, b) =>
+      (a.block?.area ?? 'zz').localeCompare(b.block?.area ?? 'zz', 'ja') || a.price - b.price);
+  }
+  return copy.sort((a, b) => a.price - b.price);
+}
 
 /** Compact single-series trend line — the card's "최저가" label names it. */
 function sparkline(snapshots, mode) {
@@ -338,14 +349,48 @@ function gameCard(g) {
       body.append(box);
     }
 
+    if (v.areas?.length) {
+      const areas = document.createElement('div');
+      areas.className = 'areas';
+      areas.innerHTML =
+        '<div class="events-h">좌석 구역별 최저가</div>' +
+        '<table><thead><tr><th>구역</th><th class="num">최저가</th>' +
+        '<th class="num">중앙값</th><th class="num">매물</th></tr></thead><tbody>' +
+        v.areas.map((a) => `
+          <tr>
+            <td>${a.area}</td>
+            <td class="num"><b>${yen(a.min)}</b></td>
+            <td class="num">${yen(a.median)}</td>
+            <td class="num">${a.count}건</td>
+          </tr>`).join('') +
+        '</tbody></table>';
+      body.append(areas);
+    }
+
+    const sortBar = document.createElement('div');
+    sortBar.className = 'sortbar';
+    sortBar.innerHTML = '<span class="events-h">매물 목록</span>' +
+      `<button class="chip${state.sort === 'price' ? ' on' : ''}" data-s="price">가격순</button>` +
+      `<button class="chip${state.sort === 'area' ? ' on' : ''}" data-s="area">구역순</button>`;
+    sortBar.addEventListener('click', (e) => {
+      const s = e.target.dataset?.s;
+      if (!s || s === state.sort) return;
+      state.sort = s;
+      fill();
+    });
+    body.append(sortBar);
+
     const table = document.createElement('table');
     table.innerHTML =
-      `<thead><tr><th class="num">가격</th><th class="num">매수</th>` +
+      `<thead><tr><th class="num">가격</th><th class="num">매수</th><th>구역 · 열</th>` +
       `<th>좌석</th><th>수령</th><th></th></tr></thead><tbody>` +
-      v.cheapest.slice(0, 15).map((l) => `
+      sortListings(v.cheapest).slice(0, 15).map((l) => `
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
           <td class="num">${l.qty ?? '—'}</td>
+          <td class="area">${l.block
+            ? `<b>${l.block.area}</b>${l.block.row ? `<br><span class="sub">${l.block.row}</span>` : ''}`
+            : '—'}</td>
           <td class="seat">${l.restricted ? '<span class="warn">자격제한</span> ' : ''}${l.seat || '—'}</td>
           <td class="tags">${l.tags.join(' · ')}</td>
           <td>${l.url ? `<a href="https://ticketjam.jp${l.url}" target="_blank" rel="noopener">보기</a>` : ''}</td>

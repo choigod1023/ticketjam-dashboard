@@ -194,3 +194,17 @@ td a:hover { text-decoration: underline; }
 .ev--flip { border-left-color: var(--series-3); }
 .ev-t { color: var(--muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
 .tooltip .tt-ev { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--border); color: var(--ink-2); white-space: normal; max-width: 260px; }
+
+/* Seat-area breakdown and listing sort control. */
+.areas { margin-top: 14px; }
+.areas table { margin-top: 4px; }
+.areas td, .areas th { padding: 5px 8px; }
+.sortbar { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.sortbar .events-h { margin: 0 6px 0 0; }
+.chip {
+  font: inherit; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.chip.on { background: var(--ink); color: var(--page); border-color: var(--ink); }
+td.area { white-space: nowrap; }
+td.area .sub { color: var(--muted); font-size: 11px; }
