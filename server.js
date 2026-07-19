@@ -107,6 +107,9 @@ const server = createServer(async (req, res) => {
     if (body.trip) next.trip = { ...readConfig().trip, ...body.trip };
     if (Array.isArray(body.regions)) next.regions = body.regions;
     if (Number.isFinite(body.refreshMinutes)) next.refreshMinutes = body.refreshMinutes;
+    if ('ticketCount' in body) {
+      next.ticketCount = Number.isInteger(body.ticketCount) ? body.ticketCount : null;
+    }
     const cfg = writeConfig(next);
     // New window means the cached payload is stale — repopulate immediately.
     runRefresh().catch(() => {});

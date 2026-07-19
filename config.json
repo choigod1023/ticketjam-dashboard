@@ -1,1 +1,32 @@
-{"trip":{"start":"2026-08-02","end":"2026-08-06","label":"도쿄 여행 (우에노 8/2-8/6)"},"regions":["東京都","神奈川県","千葉県","埼玉県"],"teams":["giants","yakult-swallows","baystars","marines","seibulions","hanshintigers","dragons","carp","fighters","softbankhawks","buffaloes","rakuteneagles"],"refreshMinutes":30,"maxPagesPerEvent":3,"requestDelayMs":700,"port":4173}
+{
+  "trip": {
+    "start": "2026-08-05",
+    "end": "2026-08-05",
+    "label": "도쿄 여행 · 수요일"
+  },
+  "regions": [
+    "東京都",
+    "神奈川県",
+    "千葉県",
+    "埼玉県"
+  ],
+  "teams": [
+    "giants",
+    "yakult-swallows",
+    "baystars",
+    "marines",
+    "seibulions",
+    "hanshintigers",
+    "dragons",
+    "carp",
+    "fighters",
+    "softbankhawks",
+    "buffaloes",
+    "rakuteneagles"
+  ],
+  "refreshMinutes": 30,
+  "maxPagesPerEvent": 3,
+  "requestDelayMs": 700,
+  "port": 4173,
+  "ticketCount": 1
+}

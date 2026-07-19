@@ -289,7 +289,7 @@ function gameCard(g) {
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
           <td class="num">${l.qty ?? '—'}</td>
-          <td class="seat">${l.seat || '—'}</td>
+          <td class="seat">${l.restricted ? '<span class="warn">자격제한</span> ' : ''}${l.seat || '—'}</td>
           <td class="tags">${l.tags.join(' · ')}</td>
           <td>${l.url ? `<a href="https://ticketjam.jp${l.url}" target="_blank" rel="noopener">보기</a>` : ''}</td>
         </tr>`).join('') +
@@ -326,9 +326,10 @@ function render(data) {
   // controls reflect stored config
   el('#start').value = data.config?.trip?.start ?? '';
   el('#end').value = data.config?.trip?.end ?? '';
-  for (const box of document.querySelectorAll('.regions input')) {
+  for (const box of document.querySelectorAll('.regions input[value]')) {
     box.checked = (data.config?.regions ?? []).includes(box.value);
   }
+  el('#one').checked = data.config?.ticketCount === 1;
 
   // status line
   const st = el('#status');
@@ -345,7 +346,8 @@ function render(data) {
     ['경기 수', games.length, `${data.trip?.start ?? ''} ~ ${data.trip?.end ?? ''}`],
     ['최저가', yen(mins.length ? Math.min(...mins) : null), '전체 경기 중'],
     ['평균 최저가', yen(mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : null), '경기별 최저가 평균'],
-    ['총 출품', games.reduce((s, g) => s + g.stats.count, 0).toLocaleString(), '수집된 리세일 건수'],
+    ['총 출품', games.reduce((s, g) => s + g.stats.count, 0).toLocaleString(),
+      data.ticketCount === 1 ? '1매 구매 가능 · 자격제한 제외' : '자격제한 좌석 제외'],
   ];
   el('#tiles').innerHTML = tiles
     .map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`)
@@ -401,13 +403,14 @@ el('#refresh').addEventListener('click', async () => {
 });
 
 el('#apply').addEventListener('click', async () => {
-  const regions = [...document.querySelectorAll('.regions input:checked')].map((b) => b.value);
+  const regions = [...document.querySelectorAll('.regions input[value]:checked')].map((b) => b.value);
   await fetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       trip: { start: el('#start').value, end: el('#end').value },
       regions,
+      ticketCount: el('#one').checked ? 1 : null,
     }),
   });
   setTimeout(load, 600);
