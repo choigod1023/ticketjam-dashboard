@@ -85,7 +85,7 @@ function historyChart(snapshots, mode) {
   const tSpan = t1 - t0 || 1;
 
   const all = snapshots
-    .flatMap((s) => [series(s, mode).min, series(s, mode).median])
+    .flatMap((s) => [series(s, mode).min, series(s, mode).median, s.resale?.min])
     .filter((v) => v != null);
   if (!all.length) return null;
 
@@ -132,13 +132,17 @@ function historyChart(snapshots, mode) {
   }
 
   const defs = [
-    { key: 'min', name: '최저가', color: 'var(--series-1)' },
-    { key: 'median', name: '중앙값', color: 'var(--series-2)' },
+    { name: '티켓잼 최저', color: 'var(--series-1)', at: (sn) => series(sn, mode).min },
+    { name: '티켓잼 중앙', color: 'var(--series-2)', at: (sn) => series(sn, mode).median },
   ];
+  // Only plot the second source if it was actually collected for this game.
+  if (snapshots.some((sn) => sn.resale?.min != null)) {
+    defs.push({ name: 'チケ流 최저', color: 'var(--series-3)', at: (sn) => sn.resale?.min });
+  }
 
   for (const s of defs) {
     const pts = snapshots
-      .map((snap, i) => ({ x: X(times[i]), y: Y(series(snap, mode)[s.key]), v: series(snap, mode)[s.key] }))
+      .map((snap, i) => ({ x: X(times[i]), y: Y(s.at(snap)), v: s.at(snap) }))
       .filter((p) => Number.isFinite(p.y));
     if (!pts.length) continue;
 
@@ -189,7 +193,7 @@ function historyChart(snapshots, mode) {
     const x = X(times[best]);
     cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('opacity', 1);
     defs.forEach((s, i) => {
-      const v = series(snap, mode)[s.key];
+      const v = s.at(snap);
       dots[i].setAttribute('cx', x);
       dots[i].setAttribute('cy', Y(v));
       dots[i].setAttribute('opacity', Number.isFinite(v) ? 1 : 0);
@@ -198,7 +202,7 @@ function historyChart(snapshots, mode) {
       `<div class="tt-t">${JST.stamp.format(new Date(snap.t))}</div>` +
       defs.map((s) =>
         `<div class="tt-r"><span><span class="sw" style="background:${s.color}"></span>` +
-        `${s.name}</span><b>${yen(series(snap, mode)[s.key])}</b></div>`).join('') +
+        `${s.name}</span><b>${yen(s.at(snap))}</b></div>`).join('') +
       `<div class="tt-r"><span>매물</span><b>${series(snap, mode).count}건</b></div>`;
     tip.classList.add('on');
     tip.style.left = Math.min(ev.clientX + 14, innerWidth - 190) + 'px';
@@ -248,6 +252,18 @@ function gameCard(g) {
     </div>`;
   head.querySelector('.price-block').append(deltaNode(g.history, state.mode));
 
+  if (g.resale) {
+    const jam = v.stats.min, other = g.resale.min;
+    const cmp = document.createElement('div');
+    cmp.className = 'compare';
+    cmp.innerHTML =
+      `<span><span class="src">티켓잼</span> <b class="${jam <= other ? 'win' : ''}">${yen(jam)}</b></span>` +
+      `<span><span class="src">チケ流${g.resale.source === 'official' ? '<span class="official">공식</span>' : ''}</span> ` +
+      `<b class="${other < jam ? 'win' : ''}">${yen(other)}</b> <span class="src">(${g.resale.count}건)</span></span>` +
+      (other < jam ? `<span class="src">→ チケ流가 ${yen(jam - other)} 저렴</span>` : '');
+    head.querySelector('.game-id').append(cmp);
+  }
+
   const spark = sparkline(g.history, state.mode);
   if (spark) head.append(spark);
   else {
@@ -273,8 +289,9 @@ function gameCard(g) {
     const legend = document.createElement('div');
     legend.className = 'legend';
     legend.innerHTML =
-      `<span><span class="sw" style="background:var(--series-1)"></span>최저가</span>` +
-      `<span><span class="sw" style="background:var(--series-2)"></span>중앙값</span>`;
+      `<span><span class="sw" style="background:var(--series-1)"></span>티켓잼 최저</span>` +
+      `<span><span class="sw" style="background:var(--series-2)"></span>티켓잼 중앙</span>` +
+      (g.resale ? `<span><span class="sw" style="background:var(--series-3)"></span>チケ流 최저</span>` : '');
     body.append(legend);
 
     const wrap = document.createElement('div');
@@ -299,7 +316,8 @@ function gameCard(g) {
     body.append(table);
 
     const link = document.createElement('p');
-    link.innerHTML = `<a href="${g.url}" target="_blank" rel="noopener">티켓잼에서 전체 보기 →</a>`;
+    link.innerHTML = `<a href="${g.url}" target="_blank" rel="noopener">티켓잼에서 전체 보기 →</a>` +
+      (g.resale ? ` &nbsp;·&nbsp; <a href="${g.resale.url}" target="_blank" rel="noopener">チケット流通センター에서 보기 →</a>` : '');
     link.style.cssText = 'font-size:13px;margin:12px 0 0';
     body.append(link);
   };

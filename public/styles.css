@@ -10,6 +10,7 @@
   --border: rgba(11, 11, 11, 0.1);
   --series-1: #2a78d6;
   --series-2: #008300;
+  --series-3: #e87ba4;
   --good: #006300;
   --critical: #d03b3b;
   --wash: rgba(11, 11, 11, 0.04);
@@ -28,6 +29,7 @@
     --border: rgba(255, 255, 255, 0.1);
     --series-1: #3987e5;
     --series-2: #008300;
+    --series-3: #d55181;
     --good: #0ca30c;
     --wash: rgba(255, 255, 255, 0.06);
   }
@@ -45,6 +47,7 @@
   --border: rgba(255, 255, 255, 0.1);
   --series-1: #3987e5;
   --series-2: #008300;
+  --series-3: #d55181;
   --good: #0ca30c;
   --wash: rgba(255, 255, 255, 0.06);
 }
@@ -173,3 +176,11 @@ td a:hover { text-decoration: underline; }
 }
 
 :root[data-theme='dark'] .warn { background: #e66767; color: #1a1a19; }
+
+/* Second price source (チケット流通センター) shown beside TicketJam. */
+.compare { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; margin-top: 6px; }
+.compare .src { color: var(--muted); }
+.compare b { font-variant-numeric: tabular-nums; }
+.compare .win { color: var(--good); font-weight: 700; }
+.official { font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 3px;
+  background: var(--series-2); color: #fff; margin-left: 4px; }
