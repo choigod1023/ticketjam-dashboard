@@ -10,7 +10,7 @@
 <div class="wrap">
   <header>
     <h1>티켓잼 프로야구 티켓 대시보드</h1>
-    <p class="sub">여행 기간의 NPB 경기 리세일 최저가를 자동으로 추적합니다. 가격은 모두 1매 기준(円)이며 시각은 일본시간(JST)입니다.</p>
+    <p class="sub">여행 기간의 NPB 경기 리세일 최저가를 30분마다 자동 수집합니다. 아래 필터는 즉시 적용됩니다. 가격은 모두 1매 기준(円)이며 시각은 일본시간(JST)입니다.</p>
 
     <div class="controls">
       <div class="field">
@@ -40,8 +40,7 @@
         </div>
       </div>
       <div class="spacer"></div>
-      <button id="apply">적용</button>
-      <button id="refresh" class="ghost">지금 갱신</button>
+      <button id="refresh" class="ghost" hidden>지금 갱신</button>
     </div>
 
     <div class="status" id="status"></div>
