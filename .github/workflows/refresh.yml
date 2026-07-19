@@ -40,9 +40,15 @@ jobs:
             echo "no change"
           else
             git commit -m "data: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
-            # The scheduled run races nothing but a manual push; rebase and retry once.
-            git pull --rebase --autostash origin master || true
-            git push origin HEAD:master
+            # A manual push can land between checkout and commit. data/*.json is
+            # regenerated every run, so on conflict the freshly collected copy
+            # always wins (-X theirs favours the commit being replayed).
+            for attempt in 1 2 3; do
+              git fetch origin master
+              git rebase -X theirs origin/master || { git rebase --abort; exit 1; }
+              git push origin HEAD:master && break
+              echo "push race, retry $attempt"
+            done
           fi
 
       - name: Assemble site
