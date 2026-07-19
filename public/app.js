@@ -75,7 +75,7 @@ function sparkline(snapshots, mode) {
 }
 
 /** Full price-history chart: 최저가 + 중앙값 over time, with a hover crosshair. */
-function historyChart(snapshots, mode) {
+function historyChart(snapshots, mode, events = []) {
   const w = 1000, h = 260;
   const m = { t: 14, r: 20, b: 28, l: 64 };
   const iw = w - m.l - m.r, ih = h - m.t - m.b;
@@ -168,6 +168,23 @@ function historyChart(snapshots, mode) {
     svg.append(lab);
   }
 
+  // Event annotations: a dashed rule at the moment plus a tick on the axis.
+  const inRange = events.filter((e) => {
+    const t = new Date(e.t).getTime();
+    return t >= t0 && t <= t1;
+  });
+  for (const e of inRange) {
+    const x = X(new Date(e.t).getTime());
+    svg.append(mk('line', {
+      x1: x, x2: x, y1: m.t, y2: m.t + ih,
+      stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '3 3', opacity: 0.55,
+    }));
+    svg.append(mk('path', {
+      d: `M${x - 4} ${m.t - 2} L${x + 4} ${m.t - 2} L${x} ${m.t + 5} Z`,
+      fill: 'var(--muted)',
+    }));
+  }
+
   const cross = mk('line', {
     y1: m.t, y2: m.t + ih, stroke: 'var(--axis)', 'stroke-width': 1, opacity: 0,
   });
@@ -203,7 +220,18 @@ function historyChart(snapshots, mode) {
       defs.map((s) =>
         `<div class="tt-r"><span><span class="sw" style="background:${s.color}"></span>` +
         `${s.name}</span><b>${yen(s.at(snap))}</b></div>`).join('') +
-      `<div class="tt-r"><span>매물</span><b>${series(snap, mode).count}건</b></div>`;
+      `<div class="tt-r"><span>매물</span><b>${series(snap, mode).count}건</b></div>` +
+      (() => {
+        // Anything logged between the previous reading and this one belongs here.
+        const from = best > 0 ? times[best - 1] : -Infinity;
+        const hit = inRange.filter((e) => {
+          const t = new Date(e.t).getTime();
+          return t > from && t <= times[best];
+        });
+        return hit.length
+          ? `<div class="tt-ev">${hit.map((e) => `▸ ${e.text}`).join('<br>')}</div>`
+          : '';
+      })();
     tip.classList.add('on');
     tip.style.left = Math.min(ev.clientX + 14, innerWidth - 190) + 'px';
     tip.style.top = ev.clientY + 14 + 'px';
@@ -296,9 +324,19 @@ function gameCard(g) {
 
     const wrap = document.createElement('div');
     wrap.className = 'chart-wrap';
-    const chart = historyChart(g.history, state.mode);
+    const chart = historyChart(g.history, state.mode, g.events ?? []);
     if (chart) wrap.append(chart);
     body.append(wrap);
+
+    const evs = (g.events ?? []).slice(-8).reverse();
+    if (evs.length) {
+      const box = document.createElement('div');
+      box.className = 'events';
+      box.innerHTML = '<div class="events-h">가격 이벤트</div>' + evs.map((e) =>
+        `<div class="ev ev--${e.kind}"><span class="ev-t">${JST.stamp.format(new Date(e.t))}</span>${e.text}</div>`
+      ).join('');
+      body.append(box);
+    }
 
     const table = document.createElement('table');
     table.innerHTML =
