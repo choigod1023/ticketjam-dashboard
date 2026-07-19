@@ -1,0 +1,12 @@
+{
+  "name": "ticketjam-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TicketJam NPB ticket price dashboard for a Tokyo trip window",
+  "scripts": {
+    "start": "node server.js",
+    "refresh": "node refresh-once.js"
+  },
+  "engines": { "node": ">=18" }
+}
