@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>티켓잼 프로야구 티켓 대시보드</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>티켓잼 프로야구 티켓 대시보드</h1>
+    <p class="sub">여행 기간의 NPB 경기 리세일 최저가를 자동으로 추적합니다. 가격은 모두 1매 기준(円)이며 시각은 일본시간(JST)입니다.</p>
+
+    <div class="controls">
+      <div class="field">
+        <label for="start">시작일</label>
+        <input type="date" id="start">
+      </div>
+      <div class="field">
+        <label for="end">종료일</label>
+        <input type="date" id="end">
+      </div>
+      <div class="field">
+        <label>지역</label>
+        <div class="regions">
+          <label><input type="checkbox" value="東京都">도쿄</label>
+          <label><input type="checkbox" value="神奈川県">가나가와</label>
+          <label><input type="checkbox" value="千葉県">치바</label>
+          <label><input type="checkbox" value="埼玉県">사이타마</label>
+          <label><input type="checkbox" value="愛知県">아이치</label>
+          <label><input type="checkbox" value="大阪府">오사카</label>
+          <label><input type="checkbox" value="兵庫県">효고</label>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <button id="apply">적용</button>
+      <button id="refresh" class="ghost">지금 갱신</button>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div id="errors"></div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+  <main id="games"></main>
+</div>
+
+<div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
