@@ -397,16 +397,22 @@ function render() {
 
 /* ------------------------------------------------------------------- wiring */
 
+// The published build is a plain static site with no API behind it; only a
+// local run has one, so don't waste a 404 round trip on every load.
+const MAYBE_LIVE = ['localhost', '127.0.0.1'].includes(location.hostname);
+
 /** Prefer the local server; fall back to the statically published snapshot. */
 async function fetchData() {
-  try {
-    const res = await fetch('/api/data', { cache: 'no-store' });
-    if (res.ok) {
-      state.live = true;
-      return await res.json();
+  if (MAYBE_LIVE) {
+    try {
+      const res = await fetch('/api/data', { cache: 'no-store' });
+      if (res.ok) {
+        state.live = true;
+        return await res.json();
+      }
+    } catch {
+      // Served from a file/static host on localhost — fall through.
     }
-  } catch {
-    // No server here — this is the static deployment.
   }
   state.live = false;
   const res = await fetch('./data/latest.json', { cache: 'no-store' });
