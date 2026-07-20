@@ -330,8 +330,8 @@ function gameCard(g) {
   const fill = () => {
     body.innerHTML = '';
 
-    if (v.areas?.length && isMappable(v.areas)) {
-      const map = stadiumMap(v.areas, {
+    if (v.cells?.length && isMappable(v.cells)) {
+      const map = stadiumMap(v.cells, {
         yen,
         selected: zone,
         onPick: (z) => { zone = z; fill(); },
@@ -340,8 +340,10 @@ function gameCard(g) {
         const wrap = document.createElement('div');
         wrap.className = 'seatmap';
         wrap.innerHTML =
-          '<div class="events-h">구장 좌석 구역별 최저가' +
-          (zone ? ' — <b>선택됨</b>, 다시 누르면 해제' : ' (구역을 누르면 아래 목록이 걸러집니다)') +
+          '<div class="events-h">구장 좌석 구역·열별 최저가' +
+          (zone
+            ? ` — <b>${zone.area} ${zone.row || ''}</b> 선택됨, 다시 누르면 해제`
+            : ' (칸을 누르면 아래 목록이 걸러집니다)') +
           '</div>';
         wrap.append(map.svg);
         const key = document.createElement('div');
@@ -351,7 +353,7 @@ function gameCard(g) {
         wrap.append(key);
         body.append(wrap);
       }
-    } else if (v.areas?.length) {
+    } else if (v.cells?.length || v.areas?.length) {
       const note = document.createElement('div');
       note.className = 'mapnote';
       note.textContent =
@@ -383,7 +385,7 @@ function gameCard(g) {
       body.append(box);
     }
 
-    const shownAreas = zone ? v.areas.filter((a) => zoneOf(a.area) === zone) : v.areas;
+    const shownAreas = zone ? v.areas.filter((a) => a.area === zone.area) : v.areas;
     if (shownAreas.length) {
       const areas = document.createElement('div');
       areas.className = 'areas';
@@ -419,7 +421,8 @@ function gameCard(g) {
     table.innerHTML =
       `<thead><tr><th class="num">가격</th><th class="num">매수</th><th>구역 · 열</th>` +
       `<th>좌석</th><th>수령</th><th></th></tr></thead><tbody>` +
-      sortListings(v.cheapest.filter((l) => !zone || zoneOf(l.block?.area) === zone))
+      sortListings(v.cheapest.filter((l) =>
+        !zone || (l.block?.area === zone.area && (l.block?.row || '') === zone.row)))
         .slice(0, 15).map((l) => `
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
