@@ -1,2 +1,4 @@
 node_modules/
 data/*.tmp
+# Regenerated every run and shipped straight to Pages; see refresh.yml
+data/latest.json
