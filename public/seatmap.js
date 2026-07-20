@@ -28,7 +28,7 @@ const ZONES = [
 export function zoneOf(area) {
   const a = String(area || '');
   if (!a || a === '구역 미기재') return null;
-  if (/ネット裏|バックネット/.test(a)) {
+  if (/ネット裏|バックネット|中央指定席|中央席/.test(a)) {
     if (/STARSIDE|STAR SIDE|3塁|三塁/.test(a)) return 'backnet_third';
     if (/BAYSIDE|1塁|一塁/.test(a)) return 'backnet_first';
     return 'backnet';
@@ -80,6 +80,44 @@ const mk = (tag, attrs) => {
  * Draw the plan. `cells` is the per (area, row) summary. `onPick` receives the
  * chosen cell ({area, row}) or null to clear.
  */
+/** Numeric extent of a row label, for merging spans: "18 ~ 28段" -> [18, 28]. */
+function rowExtent(row) {
+  const ns = (String(row || '').match(/\d+/g) || []).map(Number);
+  return ns.length ? [Math.min(...ns), Math.max(...ns)] : null;
+}
+
+/**
+ * A wedge can only carry so many rings before they become unreadable slivers —
+ * Jingu's left field alone has 29 distinct row ranges. Past the limit, adjacent
+ * depth bands are merged and labelled with the span they actually cover, so the
+ * aggregation stays visible rather than silently dropping rows.
+ */
+function limitBands(list, max = 6) {
+  if (list.length <= max) return list;
+  const sorted = [...list].sort((a, b) => a.order - b.order);
+  const per = Math.ceil(sorted.length / max);
+  const out = [];
+  for (let i = 0; i < sorted.length; i += per) {
+    const chunk = sorted.slice(i, i + per);
+    const ext = chunk.map((c) => rowExtent(c.row)).filter(Boolean);
+    const span = ext.length
+      ? `${Math.min(...ext.map((e) => e[0]))} ~ ${Math.max(...ext.map((e) => e[1]))}단`
+      : `${chunk.length}개 구간`;
+    out.push({
+      zone: chunk[0].zone,
+      row: span,
+      rows: chunk.map((c) => c.row),
+      order: chunk[0].order,
+      min: Math.min(...chunk.map((c) => c.min)),
+      median: Math.min(...chunk.map((c) => c.median)),
+      count: chunk.reduce((a, c) => a + c.count, 0),
+      areas: [...new Set(chunk.flatMap((c) => c.areas))],
+      merged: chunk.length > 1,
+    });
+  }
+  return out;
+}
+
 export function stadiumMap(cells, { yen, onPick, selected } = {}) {
   const placed = cells.filter((c) => zoneOf(c.area));
   if (!placed.length) return null;
@@ -106,9 +144,32 @@ export function stadiumMap(cells, { yen, onPick, selected } = {}) {
     fill: 'none', stroke: 'var(--axis)', 'stroke-width': 1.5,
   }));
 
+  // Collapse to (zone, row). Venues like Jingu split an area further by block
+  // letter ("レフト (Xブロック)"), but nothing tells us where block X sits, so
+  // drawing each as its own band produces unreadable slivers that claim a
+  // precision we don't have. The table below keeps the full breakdown.
+  const merged = new Map();
+  for (const c of placed) {
+    const z = zoneOf(c.area);
+    const key = `${z}\u0000${c.row || ''}`;
+    const cur = merged.get(key);
+    if (!cur) {
+      merged.set(key, { zone: z, row: c.row || '', rows: [c.row || ''],
+        order: c.order ?? 9999, min: c.min, median: c.median, count: c.count,
+        areas: [c.area] });
+    } else {
+      cur.min = Math.min(cur.min, c.min);
+      cur.median = Math.min(cur.median, c.median);
+      cur.count += c.count;
+      cur.order = Math.min(cur.order, c.order ?? 9999);
+      if (!cur.areas.includes(c.area)) cur.areas.push(c.area);
+    }
+  }
+  const bands = [...merged.values()];
+
   for (const z of ZONES) {
     // Front rows innermost — that is what the radial axis means.
-    const own = placed.filter((c) => zoneOf(c.area) === z.id)
+    const own = limitBands(bands.filter((c) => c.zone === z.id))
       .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
 
     if (!own.length) {
@@ -123,7 +184,7 @@ export function stadiumMap(cells, { yen, onPick, selected } = {}) {
     own.forEach((c, i) => {
       const r0 = R0 + band * i;
       const r1 = r0 + band;
-      const on = selected && selected.area === c.area && selected.row === c.row;
+      const on = selected && selected.zone === c.zone && selected.row === c.row;
       const path = mk('path', {
         d: sector(cx, cy, r0 + 0.6, r1 - 0.6, z.a0 + 1.2, z.a1 - 1.2),
         fill: RAMP[step(c.min)],
@@ -131,10 +192,12 @@ export function stadiumMap(cells, { yen, onPick, selected } = {}) {
         'stroke-width': on ? 2.5 : 1.2,
         cursor: 'pointer',
       });
-      path.addEventListener('click', () => onPick?.(on ? null : { area: c.area, row: c.row }));
+      path.addEventListener('click', () => onPick?.(on ? null
+        : { zone: c.zone, row: c.row, rows: c.rows ?? [c.row], label: z.label }));
       const title = mk('title', {});
       title.textContent =
-        `${z.label} · ${c.area}\n${c.row || '열 미기재'}\n최저 ${yen(c.min)} · 중앙값 ${yen(c.median)} · ${c.count}건`;
+        `${z.label}\n${c.row || '열 미기재'}${c.merged ? ' (여러 구간 묶음)' : ''}\n` +
+        `최저 ${yen(c.min)} · ${c.count}건\n${c.areas.join(', ')}`;
       path.append(title);
       svg.append(path);
 
@@ -166,7 +229,9 @@ export function stadiumMap(cells, { yen, onPick, selected } = {}) {
   depth.textContent = '안쪽 = 앞열 · 바깥쪽 = 뒷열';
   svg.append(depth);
 
-  return { svg, count: placed.length };
+  const total = cells.reduce((a, c) => a + c.count, 0);
+  const shown = placed.reduce((a, c) => a + c.count, 0);
+  return { svg, count: placed.length, coverage: total ? shown / total : 0 };
 }
 
 export { ZONES };

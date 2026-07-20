@@ -49,6 +49,23 @@ function niceScale(lo, hi, want = 4) {
   return { lo: start, hi: end, vals };
 }
 
+
+/**
+ * Deep link into TicketJam's own filters for a seat area (and row when it is
+ * numeric). includeWords treats commas as AND, so "レフトウィング,51" lands
+ * exactly on the 51~67段 block. Letter-numbered rows fall back to area only.
+ */
+function jamUrl(g, { area, row, oneOnly } = {}) {
+  const p = ['sort_query%5BsortKindKey%5D=price_for_cell_asc'];
+  if (oneOnly) p.push('sort_query%5BremainingCountMultiple%5B1%5D%5D=1');
+  const words = [];
+  if (area) words.push(area);
+  const n = /(\d+)/.exec(row || '');
+  if (area && n) words.push(n[1]);
+  if (words.length) p.push('sort_query%5BincludeWords%5D=' + encodeURIComponent(words.join(',')));
+  return `${g.url}?${p.join('&')}`;
+}
+
 const series = (snap, mode) => snap[mode] ?? {};
 
 /** Listings sort — by price, or grouped by seating area then price. */
@@ -300,7 +317,8 @@ function gameCard(g) {
     cmp.innerHTML =
       `<span><span class="src">티켓잼</span> <b class="${jam <= other ? 'win' : ''}">${yen(jam)}</b></span>` +
       `<span><span class="src">チケ流${g.resale.source === 'official' ? '<span class="official">공식</span>' : ''}</span> ` +
-      `<b class="${other < jam ? 'win' : ''}">${yen(other)}</b> <span class="src">(${g.resale.count}건)</span></span>` +
+      `<b class="${other < jam ? 'win' : ''}">${yen(other)}</b> ` +
+      `<a class="src" href="${g.resale.url}" target="_blank" rel="noopener">(${g.resale.count}건 →)</a></span>` +
       (other < jam ? `<span class="src">→ チケ流가 ${yen(jam - other)} 저렴</span>` : '');
     head.querySelector('.game-id').append(cmp);
   }
@@ -339,12 +357,36 @@ function gameCard(g) {
       if (map) {
         const wrap = document.createElement('div');
         wrap.className = 'seatmap';
+        const pct = Math.round(map.coverage * 100);
         wrap.innerHTML =
           '<div class="events-h">구장 좌석 구역·열별 최저가' +
           (zone
-            ? ` — <b>${zone.area} ${zone.row || ''}</b> 선택됨, 다시 누르면 해제`
+            ? ` — <b>${zone.label} ${zone.row || ''}</b> 선택됨, 다시 누르면 해제`
             : ' (칸을 누르면 아래 목록이 걸러집니다)') +
+          // Not every listing states a position; say so rather than implying
+          // the plan covers everything.
+          (pct < 95 ? `<span class="cov">매물의 ${pct}%만 위치 확인됨 — 나머지는 아래 표에</span>` : '') +
           '</div>';
+        if (zone) {
+          const rows = new Set(zone.rows ?? [zone.row]);
+          const picked = v.cells.filter((c) => zoneOf(c.area) === zone.zone && rows.has(c.row || ''));
+          if (picked.length) {
+            const cell = {
+              area: picked[0].area,
+              row: zone.row,
+              count: picked.reduce((a, c) => a + c.count, 0),
+              min: Math.min(...picked.map((c) => c.min)),
+            };
+            const jump = document.createElement('a');
+            jump.className = 'jump';
+            jump.target = '_blank';
+            jump.rel = 'noopener';
+            jump.href = jamUrl(g, { area: cell.area, row: cell.row, oneOnly: state.mode === 'one' });
+            jump.innerHTML = `티켓잼에서 이 좌석 매물 <b>${cell.count}건</b> 바로 보기 → ` +
+              `<span class="src">최저 ${yen(cell.min)}</span>`;
+            wrap.append(jump);
+          }
+        }
         wrap.append(map.svg);
         const key = document.createElement('div');
         key.className = 'mapkey';
@@ -385,7 +427,7 @@ function gameCard(g) {
       body.append(box);
     }
 
-    const shownAreas = zone ? v.areas.filter((a) => a.area === zone.area) : v.areas;
+    const shownAreas = zone ? v.areas.filter((a) => zoneOf(a.area) === zone.zone) : v.areas;
     if (shownAreas.length) {
       const areas = document.createElement('div');
       areas.className = 'areas';
@@ -398,7 +440,8 @@ function gameCard(g) {
             <td>${a.area}</td>
             <td class="num"><b>${yen(a.min)}</b></td>
             <td class="num">${yen(a.median)}</td>
-            <td class="num">${a.count}건</td>
+            <td class="num"><a href="${jamUrl(g, { area: a.area, oneOnly: state.mode === 'one' })}"
+              target="_blank" rel="noopener">${a.count}건 →</a></td>
           </tr>`).join('') +
         '</tbody></table>';
       body.append(areas);
@@ -422,7 +465,8 @@ function gameCard(g) {
       `<thead><tr><th class="num">가격</th><th class="num">매수</th><th>구역 · 열</th>` +
       `<th>좌석</th><th>수령</th><th></th></tr></thead><tbody>` +
       sortListings(v.cheapest.filter((l) =>
-        !zone || (l.block?.area === zone.area && (l.block?.row || '') === zone.row)))
+        !zone || (zoneOf(l.block?.area) === zone.zone
+          && new Set(zone.rows ?? [zone.row]).has(l.block?.row || ''))))
         .slice(0, 15).map((l) => `
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
@@ -457,7 +501,8 @@ function gameCard(g) {
     }
 
     const link = document.createElement('p');
-    link.innerHTML = `<a href="${g.url}" target="_blank" rel="noopener">티켓잼에서 전체 보기 →</a>` +
+    link.innerHTML = `<a href="${jamUrl(g, { oneOnly: state.mode === 'one' })}" target="_blank" rel="noopener">` +
+      `티켓잼에서 전체 ${v.stats.count}건 보기 →</a>` +
       (g.resale ? ` &nbsp;·&nbsp; <a href="${g.resale.url}" target="_blank" rel="noopener">チケット流通センター에서 보기 →</a>` : '');
     link.style.cssText = 'font-size:13px;margin:12px 0 0';
     body.append(link);
