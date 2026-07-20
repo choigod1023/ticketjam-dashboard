@@ -434,6 +434,25 @@ function gameCard(g) {
       `</tbody>`;
     body.append(table);
 
+    if (g.official) {
+      const o = g.official;
+      const box = document.createElement('div');
+      box.className = 'official-box';
+      box.innerHTML = o.none
+        ? `<div class="events-h">구단 공식 리셀</div>
+           <div class="off-none">이 구단은 공식 리셀이 <b>없습니다</b>. ${o.note}</div>`
+        : `<div class="events-h">구단 공식 리셀
+             <span class="acc acc--${o.access}">${
+               { easy: '가입 쉬움', ok: '가입 보통', hard: '가입 까다로움' }[o.access] ?? ''
+             }</span></div>
+           <div class="off-row"><b>${o.name}</b> <span class="src">· ${o.platform}</span></div>
+           <div class="off-row"><span class="src">가격 상한</span> ${o.cap}</div>
+           <div class="off-row"><span class="src">구매 가능</span> ${o.opens} · ${o.type}</div>
+           <div class="off-row off-note">${o.note}</div>
+           <div class="off-row"><a href="${o.url}" target="_blank" rel="noopener">공식 리셀 열기 →</a></div>`;
+      body.append(box);
+    }
+
     const link = document.createElement('p');
     link.innerHTML = `<a href="${g.url}" target="_blank" rel="noopener">티켓잼에서 전체 보기 →</a>` +
       (g.resale ? ` &nbsp;·&nbsp; <a href="${g.resale.url}" target="_blank" rel="noopener">チケット流通センター에서 보기 →</a>` : '');
