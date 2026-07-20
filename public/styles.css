@@ -220,3 +220,15 @@ td.area .sub { color: var(--muted); font-size: 11px; }
 .mapkey .k-na { background: var(--wash); border: 1px solid var(--border); }
 .mapnote { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.6;
   padding: 8px 12px; background: var(--wash); border-radius: 6px; }
+
+/* Club official resale summary. */
+.official-box { margin-top: 16px; padding: 12px 14px; background: var(--wash); border-radius: 8px; }
+.off-row { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+.off-row .src { color: var(--muted); display: inline-block; min-width: 68px; }
+.off-note { color: var(--muted); font-style: normal; }
+.off-none { font-size: 12px; color: var(--ink-2); }
+.acc { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 6px;
+  text-transform: none; letter-spacing: 0; }
+.acc--easy { background: #0ca30c; color: #fff; }
+.acc--ok { background: #eda100; color: #0b0b0b; }
+.acc--hard { background: #b3312f; color: #fff; }
