@@ -232,3 +232,14 @@ td.area .sub { color: var(--muted); font-size: 11px; }
 .acc--easy { background: #0ca30c; color: #fff; }
 .acc--ok { background: #eda100; color: #0b0b0b; }
 .acc--hard { background: #b3312f; color: #fff; }
+
+/* Jump-out to the source site with its own filters applied. */
+.jump { display: inline-block; margin-top: 8px; padding: 7px 12px; border-radius: 6px;
+  background: var(--ink); color: var(--page); font-size: 12px; font-weight: 600;
+  text-decoration: none; }
+.jump:hover { opacity: .85; }
+.jump .src { color: var(--page); opacity: .7; font-weight: 500; }
+.areas td a { color: var(--series-1); text-decoration: none; }
+.areas td a:hover { text-decoration: underline; }
+.cov { display: block; margin-top: 3px; color: var(--muted); font-weight: 500;
+  text-transform: none; letter-spacing: 0; font-size: 11px; }
