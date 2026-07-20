@@ -208,3 +208,15 @@ td a:hover { text-decoration: underline; }
 .chip.on { background: var(--ink); color: var(--page); border-color: var(--ink); }
 td.area { white-space: nowrap; }
 td.area .sub { color: var(--muted); font-size: 11px; }
+
+/* Schematic stadium plan. */
+.seatmap { margin-top: 14px; }
+.seatmap svg { margin: 6px auto 0; }
+.mapkey { display: flex; align-items: center; gap: 6px; justify-content: center;
+  font-size: 11px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+.mapkey span { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-left: 8px; }
+.mapkey .k-lo { background: #cde2fb; margin-left: 0; }
+.mapkey .k-hi { background: #184f95; }
+.mapkey .k-na { background: var(--wash); border: 1px solid var(--border); }
+.mapnote { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.6;
+  padding: 8px 12px; background: var(--wash); border-radius: 6px; }

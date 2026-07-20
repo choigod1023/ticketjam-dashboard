@@ -1,3 +1,5 @@
+import { stadiumMap, zoneOf, isMappable } from './seatmap.js';
+
 const yen = (n) => (n == null ? '—' : '¥' + n.toLocaleString('ja-JP'));
 const el = (sel) => document.querySelector(sel);
 
@@ -323,8 +325,40 @@ function gameCard(g) {
   body.hidden = !state.open.has(g.id);
   card.append(body);
 
+  let zone = null;   // selected schematic zone, or null for "all"
+
   const fill = () => {
     body.innerHTML = '';
+
+    if (v.areas?.length && isMappable(v.areas)) {
+      const map = stadiumMap(v.areas, {
+        yen,
+        selected: zone,
+        onPick: (z) => { zone = z; fill(); },
+      });
+      if (map) {
+        const wrap = document.createElement('div');
+        wrap.className = 'seatmap';
+        wrap.innerHTML =
+          '<div class="events-h">구장 좌석 구역별 최저가' +
+          (zone ? ' — <b>선택됨</b>, 다시 누르면 해제' : ' (구역을 누르면 아래 목록이 걸러집니다)') +
+          '</div>';
+        wrap.append(map.svg);
+        const key = document.createElement('div');
+        key.className = 'mapkey';
+        key.innerHTML = '<span class="k-lo"></span>싼 좌석<span class="k-hi"></span>비싼 좌석' +
+          '<span class="k-na"></span>매물 없음';
+        wrap.append(key);
+        body.append(wrap);
+      }
+    } else if (v.areas?.length) {
+      const note = document.createElement('div');
+      note.className = 'mapnote';
+      note.textContent =
+        '이 구장은 좌석 구역이 코드(예: A01エリア, 112ブロック, 入口14)로만 표기돼 ' +
+        '실제 위치를 알 수 없어 좌석표를 그리지 않습니다. 아래 표를 참고하세요.';
+      body.append(note);
+    }
     const legend = document.createElement('div');
     legend.className = 'legend';
     legend.innerHTML =
@@ -349,14 +383,15 @@ function gameCard(g) {
       body.append(box);
     }
 
-    if (v.areas?.length) {
+    const shownAreas = zone ? v.areas.filter((a) => zoneOf(a.area) === zone) : v.areas;
+    if (shownAreas.length) {
       const areas = document.createElement('div');
       areas.className = 'areas';
       areas.innerHTML =
         '<div class="events-h">좌석 구역별 최저가</div>' +
         '<table><thead><tr><th>구역</th><th class="num">최저가</th>' +
         '<th class="num">중앙값</th><th class="num">매물</th></tr></thead><tbody>' +
-        v.areas.map((a) => `
+        shownAreas.map((a) => `
           <tr>
             <td>${a.area}</td>
             <td class="num"><b>${yen(a.min)}</b></td>
@@ -384,7 +419,8 @@ function gameCard(g) {
     table.innerHTML =
       `<thead><tr><th class="num">가격</th><th class="num">매수</th><th>구역 · 열</th>` +
       `<th>좌석</th><th>수령</th><th></th></tr></thead><tbody>` +
-      sortListings(v.cheapest).slice(0, 15).map((l) => `
+      sortListings(v.cheapest.filter((l) => !zone || zoneOf(l.block?.area) === zone))
+        .slice(0, 15).map((l) => `
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
           <td class="num">${l.qty ?? '—'}</td>
