@@ -243,3 +243,5 @@ td.area .sub { color: var(--muted); font-size: 11px; }
 .areas td a:hover { text-decoration: underline; }
 .cov { display: block; margin-top: 3px; color: var(--muted); font-weight: 500;
   text-transform: none; letter-spacing: 0; font-size: 11px; }
+.real { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px;
+  background: var(--series-1); color: #fff; margin-left: 4px; letter-spacing: 0; text-transform: none; }

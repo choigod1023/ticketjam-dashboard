@@ -235,3 +235,88 @@ export function stadiumMap(cells, { yen, onPick, selected } = {}) {
 }
 
 export { ZONES };
+
+/* ------------------------------------------------------------------ real map */
+
+// Join key shared by geojson polygons and my parsed price cells. The site is
+// inconsistent — "STAR SIDE" vs "STARSIDE・3塁側", "51 ~ 67段" vs "51 ~ 67" —
+// so spaces, 段/列 and ・ are stripped before comparing.
+const jkey = (s) => String(s || '').replace(/[\s段列・]/g, '').toUpperCase();
+
+/** Cheapest cell matching a polygon: exact (side,row) first, then side alone. */
+function priceForPoly(poly, byRow, bySide) {
+  const rk = jkey(poly.side) + '|' + jkey(poly.row);
+  if (byRow.has(rk)) return byRow.get(rk);
+  const sk = jkey(poly.side);
+  return bySide.has(sk) ? bySide.get(sk) : null;
+}
+
+/**
+ * Render the real TicketJam stadium plan: actual seat polygons coloured by the
+ * cheapest listing that joins to each. `geo` is the cached {polys, bounds};
+ * `cells` is my per-(area,row) price summary. `onPick({area,row})` filters.
+ */
+export function realStadiumMap(geo, cells, { yen, onPick, selected } = {}) {
+  const byRow = new Map(), bySide = new Map();
+  for (const c of cells) {
+    byRow.set(jkey(c.area) + '|' + jkey(c.row), c.min);
+    const sk = jkey(c.area);
+    if (!bySide.has(sk) || c.min < bySide.get(sk)) bySide.set(sk, c.min);
+  }
+
+  const priced = geo.polys
+    .map((p) => ({ ...p, price: priceForPoly(p, byRow, bySide) }))
+    .filter((p) => p.price != null);
+  if (!priced.length) return null;
+
+  const mins = priced.map((p) => p.price);
+  const lo = Math.min(...mins), hi = Math.max(...mins);
+  const step = (v) => (hi === lo ? 2 : Math.min(RAMP.length - 1,
+    Math.floor(((v - lo) / (hi - lo)) * RAMP.length)));
+
+  const { minX, minY, maxX, maxY } = geo.bounds;
+  const W = 640, H = 620, pad = 12;
+  const sx = (x) => pad + ((x - minX) / (maxX - minX)) * (W - pad * 2);
+  const sy = (y) => pad + ((maxY - y) / (maxY - minY)) * (H - pad * 2); // flip Y
+
+  const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
+    'aria-label': '구장 실제 좌석 배치도 · 구역별 최저가' });
+  svg.style.cssText = 'width:100%;max-width:560px;height:auto;display:block;margin:6px auto 0';
+
+  const path = (rings) => rings.map((r) =>
+    'M' + r.map(([x, y]) => `${sx(x).toFixed(1)} ${sy(y).toFixed(1)}`).join('L') + 'Z').join(' ');
+
+  // Unpriced blocks first as a faint base, so the coloured ones read on top.
+  for (const p of geo.polys) {
+    if (p.price != null) continue;
+    svg.append(mk('path', { d: path(p.g), fill: 'var(--wash)',
+      stroke: 'var(--surface-1)', 'stroke-width': 0.5 }));
+  }
+
+  for (const p of priced) {
+    const on = selected && jkey(selected.area) === jkey(p.side)
+      && (selected.row == null || jkey(selected.row) === jkey(p.row));
+    const el = mk('path', {
+      d: path(p.g),
+      fill: RAMP[step(p.price)],
+      stroke: on ? 'var(--ink)' : 'var(--surface-1)',
+      'stroke-width': on ? 1.6 : 0.5,
+      cursor: 'pointer',
+    });
+    el.addEventListener('click', () => onPick?.(on ? null : { area: p.side, row: p.row }));
+    const t = mk('title', {});
+    t.textContent = `${p.side}${p.row ? ' · ' + p.row + '段' : ''}` +
+      `${p.seat ? ' · ' + p.seat + '番' : ''}\n최저 ${yen(p.price)}`;
+    el.append(t);
+    svg.append(el);
+  }
+
+  // Field marker for orientation.
+  const cxp = sx((minX + maxX) / 2);
+  const lab = mk('text', { x: cxp, y: H - 16, 'text-anchor': 'middle',
+    'font-size': 11, fill: 'var(--muted)' });
+  lab.textContent = 'グラウンド';
+  svg.append(lab);
+
+  return { svg, coverage: priced.length / geo.polys.length };
+}
