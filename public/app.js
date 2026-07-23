@@ -1,4 +1,4 @@
-import { stadiumMap, zoneOf, isMappable } from './seatmap.js';
+import { stadiumMap, realStadiumMap, zoneOf, isMappable } from './seatmap.js';
 
 const yen = (n) => (n == null ? '—' : '¥' + n.toLocaleString('ja-JP'));
 const el = (sel) => document.querySelector(sel);
@@ -15,6 +15,20 @@ const JST = {
     hour: '2-digit', minute: '2-digit',
   }),
 };
+
+const geoCache = new Map();  // slug -> geometry (or null when absent)
+
+async function loadGeo(slug) {
+  if (geoCache.has(slug)) return geoCache.get(slug);
+  try {
+    const res = await fetch(`./data/venues/${encodeURIComponent(slug)}.json`, { cache: 'force-cache' });
+    const geo = res.ok ? await res.json() : null;
+    geoCache.set(slug, geo?.polys ? geo : null);
+  } catch {
+    geoCache.set(slug, null);
+  }
+  return geoCache.get(slug);
+}
 
 const state = {
   data: null,
@@ -345,64 +359,89 @@ function gameCard(g) {
 
   let zone = null;   // selected schematic zone, or null for "all"
 
+  // Selection works for either map shape: the real plan picks {area, row};
+  // the schematic fan picks {zone, rows, label}. These predicates normalise
+  // both so the table and listing filters don't care which drew the pick.
+  const jk = (x) => String(x || '').replace(/[\s段列・]/g, '').toUpperCase();
+  const selArea = (area) =>
+    !zone ? true : zone.area != null ? jk(area) === jk(zone.area) : zoneOf(area) === zone.zone;
+  const selRow = (row) =>
+    !zone ? true
+      : zone.area != null ? (zone.row == null || jk(row) === jk(zone.row))
+      : new Set(zone.rows ?? [zone.row]).has(row || '');
+  const onPick = (z) => { zone = z; fill(); };
+
+  /** Build the seat-map section into `slot`, real plan preferred over the fan. */
+  async function renderSeatMap(slot) {
+    const geo = g.hasGeo ? await loadGeo(g.venueSlug) : null;
+    let map = geo && realStadiumMap(geo, v.cells, { yen, selected: zone, onPick });
+    const real = !!map;
+    if (!map && v.cells?.length && isMappable(v.cells)) {
+      map = stadiumMap(v.cells, { yen, selected: zone, onPick });
+    }
+    slot.innerHTML = '';
+
+    if (!map) {
+      if (v.cells?.length || v.areas?.length) {
+        const note = document.createElement('div');
+        note.className = 'mapnote';
+        note.textContent =
+          '이 구장은 좌석 구역이 코드(예: A01エリア, 112ブロック, 入口14)로만 표기돼 ' +
+          '실제 위치를 알 수 없어 좌석표를 그리지 않습니다. 아래 표를 참고하세요.';
+        slot.append(note);
+      }
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'seatmap';
+    const pct = Math.round(map.coverage * 100);
+    const selLabel = zone ? (zone.label ?? zone.area) : null;
+    wrap.innerHTML =
+      `<div class="events-h">구장 좌석 배치도 · 구역별 최저가${real ? ' <span class="real">실제 좌석표</span>' : ''}` +
+      (zone
+        ? ` — <b>${selLabel} ${zone.row || ''}</b> 선택됨, 다시 누르면 해제`
+        : ' (좌석을 누르면 아래 목록이 걸러집니다)') +
+      (pct < 95 ? `<span class="cov">매물의 ${pct}%만 위치 확인됨 — 나머지는 아래 표에</span>` : '') +
+      '</div>';
+
+    if (zone) {
+      const picked = v.cells.filter((c) => selArea(c.area) && selRow(c.row));
+      if (picked.length) {
+        const cell = {
+          area: picked[0].area,
+          row: zone.row,
+          count: picked.reduce((a, c) => a + c.count, 0),
+          min: Math.min(...picked.map((c) => c.min)),
+        };
+        const jump = document.createElement('a');
+        jump.className = 'jump';
+        jump.target = '_blank';
+        jump.rel = 'noopener';
+        jump.href = jamUrl(g, { area: cell.area, row: cell.row, oneOnly: state.mode === 'one' });
+        jump.innerHTML = `티켓잼에서 이 좌석 매물 <b>${cell.count}건</b> 바로 보기 → ` +
+          `<span class="src">최저 ${yen(cell.min)}</span>`;
+        wrap.append(jump);
+      }
+    }
+
+    wrap.append(map.svg);
+    const key = document.createElement('div');
+    key.className = 'mapkey';
+    key.innerHTML = '<span class="k-lo"></span>싼 좌석<span class="k-hi"></span>비싼 좌석' +
+      '<span class="k-na"></span>매물 없음';
+    wrap.append(key);
+    slot.append(wrap);
+  }
+
   const fill = () => {
     body.innerHTML = '';
 
-    if (v.cells?.length && isMappable(v.cells)) {
-      const map = stadiumMap(v.cells, {
-        yen,
-        selected: zone,
-        onPick: (z) => { zone = z; fill(); },
-      });
-      if (map) {
-        const wrap = document.createElement('div');
-        wrap.className = 'seatmap';
-        const pct = Math.round(map.coverage * 100);
-        wrap.innerHTML =
-          '<div class="events-h">구장 좌석 구역·열별 최저가' +
-          (zone
-            ? ` — <b>${zone.label} ${zone.row || ''}</b> 선택됨, 다시 누르면 해제`
-            : ' (칸을 누르면 아래 목록이 걸러집니다)') +
-          // Not every listing states a position; say so rather than implying
-          // the plan covers everything.
-          (pct < 95 ? `<span class="cov">매물의 ${pct}%만 위치 확인됨 — 나머지는 아래 표에</span>` : '') +
-          '</div>';
-        if (zone) {
-          const rows = new Set(zone.rows ?? [zone.row]);
-          const picked = v.cells.filter((c) => zoneOf(c.area) === zone.zone && rows.has(c.row || ''));
-          if (picked.length) {
-            const cell = {
-              area: picked[0].area,
-              row: zone.row,
-              count: picked.reduce((a, c) => a + c.count, 0),
-              min: Math.min(...picked.map((c) => c.min)),
-            };
-            const jump = document.createElement('a');
-            jump.className = 'jump';
-            jump.target = '_blank';
-            jump.rel = 'noopener';
-            jump.href = jamUrl(g, { area: cell.area, row: cell.row, oneOnly: state.mode === 'one' });
-            jump.innerHTML = `티켓잼에서 이 좌석 매물 <b>${cell.count}건</b> 바로 보기 → ` +
-              `<span class="src">최저 ${yen(cell.min)}</span>`;
-            wrap.append(jump);
-          }
-        }
-        wrap.append(map.svg);
-        const key = document.createElement('div');
-        key.className = 'mapkey';
-        key.innerHTML = '<span class="k-lo"></span>싼 좌석<span class="k-hi"></span>비싼 좌석' +
-          '<span class="k-na"></span>매물 없음';
-        wrap.append(key);
-        body.append(wrap);
-      }
-    } else if (v.cells?.length || v.areas?.length) {
-      const note = document.createElement('div');
-      note.className = 'mapnote';
-      note.textContent =
-        '이 구장은 좌석 구역이 코드(예: A01エリア, 112ブロック, 入口14)로만 표기돼 ' +
-        '실제 위치를 알 수 없어 좌석표를 그리지 않습니다. 아래 표를 참고하세요.';
-      body.append(note);
-    }
+    // Seat map slot, filled asynchronously once venue geometry (if any) loads.
+    const slot = document.createElement('div');
+    body.append(slot);
+    renderSeatMap(slot);
+
     const legend = document.createElement('div');
     legend.className = 'legend';
     legend.innerHTML =
@@ -427,7 +466,7 @@ function gameCard(g) {
       body.append(box);
     }
 
-    const shownAreas = zone ? v.areas.filter((a) => zoneOf(a.area) === zone.zone) : v.areas;
+    const shownAreas = zone ? v.areas.filter((a) => selArea(a.area)) : v.areas;
     if (shownAreas.length) {
       const areas = document.createElement('div');
       areas.className = 'areas';
@@ -465,8 +504,7 @@ function gameCard(g) {
       `<thead><tr><th class="num">가격</th><th class="num">매수</th><th>구역 · 열</th>` +
       `<th>좌석</th><th>수령</th><th></th></tr></thead><tbody>` +
       sortListings(v.cheapest.filter((l) =>
-        !zone || (zoneOf(l.block?.area) === zone.zone
-          && new Set(zone.rows ?? [zone.row]).has(l.block?.row || ''))))
+        !zone || (selArea(l.block?.area) && selRow(l.block?.row))))
         .slice(0, 15).map((l) => `
         <tr>
           <td class="num"><b>${yen(l.price)}</b></td>
