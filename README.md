@@ -5,6 +5,11 @@
 
 의존성이 없습니다. Node 18 이상만 있으면 바로 실행됩니다.
 
+![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=nodedotjs&logoColor=white)
+![Zero deps](https://img.shields.io/badge/dependencies-0-brightgreen)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-222222?logo=githubpages&logoColor=white)
+
 ## 실행
 
 ```bash
@@ -93,8 +98,8 @@ lib/parse.js       JSON-LD / 출품 목록 파서
 lib/store.js       설정·이력 저장 (원자적 쓰기)
 lib/refresh.js     수집 파이프라인
 public/            대시보드 (정적 파일)
-data/              수집 결과 — history.json, latest.json (커밋됨)
-.github/workflows/ 30분 주기 수집 + Pages 배포
+data/              수집 결과 — history.json(시계열, 커밋됨), latest.json(매 실행 재생성·Pages로만 배포)
+.github/workflows/ 10분 주기 수집 + Pages 배포
 ```
 
 ## 참고
