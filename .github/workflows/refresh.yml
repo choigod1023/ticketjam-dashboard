@@ -40,7 +40,7 @@ jobs:
           # and is ~10x larger, so committing it every 10 minutes would add
           # hundreds of MB to the repo before the trip is over. The site gets it
           # from the build below, not from git.
-          git add data/history.json data/schedule.json data/venues
+          git add data/history.json data/schedule.json data/venues data/seatmap
           if git diff --staged --quiet; then
             echo "no change"
           else
@@ -58,11 +58,12 @@ jobs:
 
       - name: Assemble site
         run: |
-          mkdir -p _site/data/venues
+          mkdir -p _site/data/venues _site/data/seatmap
           cp -r public/* _site/
           cp data/latest.json _site/data/
-          # Cached venue seat-map geometry (venue-fixed, lazy-loaded by the page)
+          # Cached venue seat-map geometry (venue-fixed) + per-event exact prices
           cp data/venues/*.json _site/data/venues/ 2>/dev/null || true
+          cp data/seatmap/*.json _site/data/seatmap/ 2>/dev/null || true
 
       - uses: actions/upload-pages-artifact@v3
         with:

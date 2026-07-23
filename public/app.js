@@ -16,7 +16,8 @@ const JST = {
   }),
 };
 
-const geoCache = new Map();  // slug -> geometry (or null when absent)
+const geoCache = new Map();   // slug -> geometry (or null when absent)
+const detailCache = new Map(); // eventId -> {polys} exact per-polygon prices
 
 async function loadGeo(slug) {
   if (geoCache.has(slug)) return geoCache.get(slug);
@@ -28,6 +29,17 @@ async function loadGeo(slug) {
     geoCache.set(slug, null);
   }
   return geoCache.get(slug);
+}
+
+async function loadDetail(eventId) {
+  if (detailCache.has(eventId)) return detailCache.get(eventId);
+  try {
+    const res = await fetch(`./data/seatmap/${eventId}.json`, { cache: 'no-store' });
+    detailCache.set(eventId, res.ok ? (await res.json()).polys : null);
+  } catch {
+    detailCache.set(eventId, null);
+  }
+  return detailCache.get(eventId);
 }
 
 const state = {
@@ -374,7 +386,9 @@ function gameCard(g) {
   /** Build the seat-map section into `slot`, real plan preferred over the fan. */
   async function renderSeatMap(slot) {
     const geo = g.hasGeo ? await loadGeo(g.venueSlug) : null;
-    let map = geo && realStadiumMap(geo, v.cells, { yen, selected: zone, onPick });
+    const detail = geo && g.hasSeatDetail ? await loadDetail(g.id) : null;
+    let map = geo && realStadiumMap(geo, v.cells, { yen, selected: zone, onPick, detail });
+    const exact = !!(map && map.exact);
     const real = !!map;
     if (!map && v.cells?.length && isMappable(v.cells)) {
       map = stadiumMap(v.cells, { yen, selected: zone, onPick });
@@ -398,7 +412,7 @@ function gameCard(g) {
     const pct = Math.round(map.coverage * 100);
     const selLabel = zone ? (zone.label ?? zone.area) : null;
     wrap.innerHTML =
-      `<div class="events-h">구장 좌석 배치도 · 구역별 최저가${real ? ' <span class="real">실제 좌석표</span>' : ''}` +
+      `<div class="events-h">구장 좌석 배치도 · 구역별 최저가${real ? ` <span class="real">실제 좌석표${exact ? ' · 정확한 가격' : ''}</span>` : ''}` +
       (zone
         ? ` — <b>${selLabel} ${zone.row || ''}</b> 선택됨, 다시 누르면 해제`
         : ' (좌석을 누르면 아래 목록이 걸러집니다)') +
@@ -406,23 +420,29 @@ function gameCard(g) {
       '</div>';
 
     if (zone) {
-      const picked = v.cells.filter((c) => selArea(c.area) && selRow(c.row));
-      if (picked.length) {
-        const cell = {
-          area: picked[0].area,
-          row: zone.row,
+      const jump = document.createElement('a');
+      jump.className = 'jump';
+      jump.target = '_blank';
+      jump.rel = 'noopener';
+      if (zone.exact && zone.ticketUrl) {
+        // Exact polygon: go straight to its cheapest listing on TicketJam.
+        jump.href = `https://ticketjam.jp${zone.ticketUrl}`;
+        jump.innerHTML =
+          `${zone.area}${zone.seat ? ' ' + zone.seat + '番' : ''} 최저가 매물로 이동 → ` +
+          `<span class="src">${yen(zone.price)} · 이 구역 ${zone.count}건</span>`;
+      } else {
+        const picked = v.cells.filter((c) => selArea(c.area) && selRow(c.row));
+        const cell = picked.length ? {
+          area: picked[0].area, row: zone.row,
           count: picked.reduce((a, c) => a + c.count, 0),
           min: Math.min(...picked.map((c) => c.min)),
-        };
-        const jump = document.createElement('a');
-        jump.className = 'jump';
-        jump.target = '_blank';
-        jump.rel = 'noopener';
+        } : null;
+        if (!cell) return void 0;
         jump.href = jamUrl(g, { area: cell.area, row: cell.row, oneOnly: state.mode === 'one' });
         jump.innerHTML = `티켓잼에서 이 좌석 매물 <b>${cell.count}건</b> 바로 보기 → ` +
           `<span class="src">최저 ${yen(cell.min)}</span>`;
-        wrap.append(jump);
       }
+      wrap.append(jump);
     }
 
     wrap.append(map.svg);

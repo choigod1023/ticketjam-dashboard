@@ -229,9 +229,9 @@ export function stadiumMap(cells, { yen, onPick, selected } = {}) {
   depth.textContent = '안쪽 = 앞열 · 바깥쪽 = 뒷열';
   svg.append(depth);
 
-  const total = cells.reduce((a, c) => a + c.count, 0);
-  const shown = placed.reduce((a, c) => a + c.count, 0);
-  return { svg, count: placed.length, coverage: total ? shown / total : 0 };
+  const placedCount = bands.reduce((a, b) => a + b.count, 0);
+  const totalCount = cells.reduce((a, c) => a + (c.count || 0), 0);
+  return { svg, coverage: totalCount ? placedCount / totalCount : 0 };
 }
 
 export { ZONES };
@@ -256,7 +256,7 @@ function priceForPoly(poly, byRow, bySide) {
  * cheapest listing that joins to each. `geo` is the cached {polys, bounds};
  * `cells` is my per-(area,row) price summary. `onPick({area,row})` filters.
  */
-export function realStadiumMap(geo, cells, { yen, onPick, selected } = {}) {
+export function realStadiumMap(geo, cells, { yen, onPick, selected, detail } = {}) {
   const byRow = new Map(), bySide = new Map();
   for (const c of cells) {
     byRow.set(jkey(c.area) + '|' + jkey(c.row), c.min);
@@ -264,8 +264,27 @@ export function realStadiumMap(geo, cells, { yen, onPick, selected } = {}) {
     if (!bySide.has(sk) || c.min < bySide.get(sk)) bySide.set(sk, c.min);
   }
 
+  // Polygon ids are per-event AND some venues serve a different map version per
+  // event, so detail collected against one version won't id-match another.
+  // Only trust detail when its ids actually belong to THIS geojson.
+  let exactMap = detail || null;
+  if (exactMap) {
+    const gIds = new Set(geo.polys.map((p) => p.id));
+    const dIds = Object.keys(exactMap).map(Number);
+    const hit = dIds.filter((id) => gIds.has(id)).length;
+    if (!dIds.length || hit / dIds.length < 0.5) exactMap = null;
+  }
+
+  // Exact per-polygon pricing (from the seat-map API) wins over the coarse
+  // (side,row) text join, which paints a whole row one colour.
   const priced = geo.polys
-    .map((p) => ({ ...p, price: priceForPoly(p, byRow, bySide) }))
+    .map((p) => {
+      const d = exactMap?.[p.id];
+      if (d) return { ...p, price: d.min, count: d.count, ticketUrl: d.url, exact: true };
+      // With authoritative detail, an unlisted polygon stays blank rather than
+      // borrowing its row's price. Only the text-join map colours by fallback.
+      return { ...p, price: exactMap ? null : priceForPoly(p, byRow, bySide) };
+    })
     .filter((p) => p.price != null);
   if (!priced.length) return null;
 
@@ -294,8 +313,9 @@ export function realStadiumMap(geo, cells, { yen, onPick, selected } = {}) {
   }
 
   for (const p of priced) {
-    const on = selected && jkey(selected.area) === jkey(p.side)
-      && (selected.row == null || jkey(selected.row) === jkey(p.row));
+    const on = selected && (selected.id != null
+      ? selected.id === p.id
+      : jkey(selected.area) === jkey(p.side) && (selected.row == null || jkey(selected.row) === jkey(p.row)));
     const el = mk('path', {
       d: path(p.g),
       fill: RAMP[step(p.price)],
@@ -303,10 +323,12 @@ export function realStadiumMap(geo, cells, { yen, onPick, selected } = {}) {
       'stroke-width': on ? 1.6 : 0.5,
       cursor: 'pointer',
     });
-    el.addEventListener('click', () => onPick?.(on ? null : { area: p.side, row: p.row }));
+    el.addEventListener('click', () => onPick?.(on ? null
+      : { area: p.side, row: p.row, seat: p.seat, id: p.id, ticketUrl: p.ticketUrl, exact: p.exact, price: p.price, count: p.count }));
     const t = mk('title', {});
     t.textContent = `${p.side}${p.row ? ' · ' + p.row + '段' : ''}` +
-      `${p.seat ? ' · ' + p.seat + '番' : ''}\n최저 ${yen(p.price)}`;
+      `${p.seat ? ' · ' + p.seat + '番' : ''}\n최저 ${yen(p.price)}` +
+      `${p.exact ? ` · ${p.count}건` : ' (근사)'}`;
     el.append(t);
     svg.append(el);
   }
@@ -318,5 +340,8 @@ export function realStadiumMap(geo, cells, { yen, onPick, selected } = {}) {
   lab.textContent = 'グラウンド';
   svg.append(lab);
 
-  return { svg, coverage: priced.length / geo.polys.length };
+  // In exact mode detail is authoritative (every listed polygon placed), so
+  // coverage is complete; the fraction only means something for the text join.
+  return { svg, exact: !!exactMap, count: priced.length,
+    coverage: exactMap ? 1 : (geo.polys.length ? priced.length / geo.polys.length : 0) };
 }
