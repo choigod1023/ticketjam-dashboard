@@ -245,3 +245,6 @@ td.area .sub { color: var(--muted); font-size: 11px; }
   text-transform: none; letter-spacing: 0; font-size: 11px; }
 .real { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px;
   background: var(--series-1); color: #fff; margin-left: 4px; letter-spacing: 0; text-transform: none; }
+.areas tr.offmap td { color: var(--ink-2); }
+.tagmini { font-size: 10px; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; }

@@ -35,7 +35,7 @@ async function loadDetail(eventId) {
   if (detailCache.has(eventId)) return detailCache.get(eventId);
   try {
     const res = await fetch(`./data/seatmap/${eventId}.json`, { cache: 'no-store' });
-    detailCache.set(eventId, res.ok ? (await res.json()).polys : null);
+    detailCache.set(eventId, res.ok ? await res.json() : null);
   } catch {
     detailCache.set(eventId, null);
   }
@@ -382,12 +382,50 @@ function gameCard(g) {
       : zone.area != null ? (zone.row == null || jk(row) === jk(zone.row))
       : new Set(zone.rows ?? [zone.row]).has(row || '');
   const onPick = (z) => { zone = z; fill(); };
+  let exactAreas = null;  // canonical per-side summary from exact detail, when available
+  let renderStamp = 0;
+
+  // Group exact per-polygon prices by the geojson's canonical side, so the
+  // area table matches the seat map exactly. Standing/unassigned tickets (no
+  // polygon) become their own row rather than polluting a seated section.
+  function buildExactAreas(geo, detail) {
+    if (!detail?.polys) return null;
+    const side = new Map(geo.polys.map((p) => [p.id, p.side]));
+    const groups = new Map();
+    let hit = 0, total = 0;
+    for (const [pid, d] of Object.entries(detail.polys)) {
+      total++;
+      const a = side.get(Number(pid));
+      if (!a) continue;
+      hit++;
+      if (!groups.has(a)) groups.set(a, []);
+      groups.get(a).push(d);
+    }
+    // Detail ids are per-event; ignore it unless it belongs to this geojson.
+    if (!total || hit / total < 0.5) return null;
+    const rows = [...groups].map(([area, ds]) => {
+      const mins = ds.map((d) => d.min).sort((x, y) => x - y);
+      return {
+        area,
+        min: mins[0],
+        median: mins[Math.floor(mins.length / 2)],
+        count: ds.reduce((a, d) => a + (d.count || 0), 0),
+      };
+    }).sort((a, b) => a.min - b.min);
+    if (detail.unassigned) {
+      rows.push({
+        area: '입석·좌석미정', min: detail.unassigned.min,
+        median: detail.unassigned.min, count: detail.unassigned.count,
+        offMap: true, url: detail.unassigned.url,
+      });
+      rows.sort((a, b) => a.min - b.min);
+    }
+    return rows;
+  }
 
   /** Build the seat-map section into `slot`, real plan preferred over the fan. */
-  async function renderSeatMap(slot) {
-    const geo = g.hasGeo ? await loadGeo(g.venueSlug) : null;
-    const detail = geo && g.hasSeatDetail ? await loadDetail(g.id) : null;
-    let map = geo && realStadiumMap(geo, v.cells, { yen, selected: zone, onPick, detail });
+  function renderSeatMap(slot, geo, detail) {
+    let map = geo && realStadiumMap(geo, v.cells, { yen, selected: zone, onPick, detail: detail?.polys });
     const exact = !!(map && map.exact);
     const real = !!map;
     if (!map && v.cells?.length && isMappable(v.cells)) {
@@ -454,13 +492,22 @@ function gameCard(g) {
     slot.append(wrap);
   }
 
-  const fill = () => {
+  const fill = async () => {
+    const myStamp = ++renderStamp;
     body.innerHTML = '';
+    body.dataset.stamp = String(myStamp);
 
-    // Seat map slot, filled asynchronously once venue geometry (if any) loads.
+    // Load geometry + exact per-polygon detail ONCE up front, so the seat map,
+    // the area table and the card all draw from the same numbers in one pass.
+    const geo = g.hasGeo ? await loadGeo(g.venueSlug) : null;
+    const detail = geo && g.hasSeatDetail ? await loadDetail(g.id) : null;
+    exactAreas = geo ? buildExactAreas(geo, detail) : null;
+    if (myStamp !== renderStamp) return; // a newer fill started; drop this one
+
+    // Seat map slot.
     const slot = document.createElement('div');
     body.append(slot);
-    renderSeatMap(slot);
+    renderSeatMap(slot, geo, detail);
 
     const legend = document.createElement('div');
     legend.className = 'legend';
@@ -486,22 +533,28 @@ function gameCard(g) {
       body.append(box);
     }
 
-    const shownAreas = zone ? v.areas.filter((a) => selArea(a.area)) : v.areas;
+    const areaSource = exactAreas ?? v.areas;
+    const shownAreas = zone ? areaSource.filter((a) => selArea(a.area)) : areaSource;
     if (shownAreas.length) {
       const areas = document.createElement('div');
       areas.className = 'areas';
       areas.innerHTML =
-        '<div class="events-h">좌석 구역별 최저가</div>' +
+        `<div class="events-h">좌석 구역별 최저가${exactAreas ? ' <span class="real">좌석표와 동일</span>' : ''}</div>` +
         '<table><thead><tr><th>구역</th><th class="num">최저가</th>' +
         '<th class="num">중앙값</th><th class="num">매물</th></tr></thead><tbody>' +
-        shownAreas.map((a) => `
-          <tr>
-            <td>${a.area}</td>
+        shownAreas.map((a) => {
+          // Standing/unassigned links straight to its cheapest listing; seated
+          // areas open the filtered TicketJam list.
+          const href = a.offMap && a.url ? `https://ticketjam.jp${a.url}`
+            : jamUrl(g, { area: a.area, oneOnly: state.mode === 'one' });
+          return `
+          <tr${a.offMap ? ' class="offmap"' : ''}>
+            <td>${a.area}${a.offMap ? ' <span class="tagmini">좌석표 밖</span>' : ''}</td>
             <td class="num"><b>${yen(a.min)}</b></td>
             <td class="num">${yen(a.median)}</td>
-            <td class="num"><a href="${jamUrl(g, { area: a.area, oneOnly: state.mode === 'one' })}"
-              target="_blank" rel="noopener">${a.count}건 →</a></td>
-          </tr>`).join('') +
+            <td class="num"><a href="${href}" target="_blank" rel="noopener">${a.count}건 →</a></td>
+          </tr>`;
+        }).join('') +
         '</tbody></table>';
       body.append(areas);
     }
