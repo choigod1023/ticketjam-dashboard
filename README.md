@@ -125,3 +125,17 @@ data/              수집 결과 — history.json(시계열, 커밋됨), latest.
 ```
 
 `node` 경로는 `which node` 로 확인해 바꾸고, `launchctl load ~/Library/LaunchAgents/com.local.ticketjam.plist` 로 등록합니다.
+
+---
+
+## 👤 기여도 & 개발 환경
+
+| 항목 | 내용 |
+|---|---|
+| **기여 비율** | **100%** (단독 개발) |
+| **커밋** | 19 / 19 (본인 / 전체 사람 커밋) |
+| **참여 인원** | 1명 |
+| **AI 코딩 도구** | Claude Code |
+| **자동화 커밋** | 76건 (본인이 구성한 GitHub Actions 자동 수집/갱신 — 집계 제외) |
+
+<sub>기여 비율은 커밋 author 이메일 기준 집계이며 봇·자동화 커밋은 제외했습니다.</sub>
