@@ -133,9 +133,9 @@ Replace the `node` path with what `which node` reports, then register it with `l
 | Item | Detail |
 |---|---|
 | **Contribution share** | **100%** (solo development) |
-| **Commits** | 19 / 19 (mine / all human commits) |
+| **Commits** | 21 / 21 (mine / all human commits) |
 | **Contributors** | 1 |
 | **AI coding tool** | Claude Code |
-| **Automated commits** | 76 (GitHub Actions collection/refresh that I configured — excluded from the count) |
+| **Automated commits** | 264 (GitHub Actions collection/refresh that I configured — excluded from the count) |
 
-<sub>Contribution share is counted by commit author email; bot and automation commits are excluded.</sub>
+<sub>Counting basis: commits reachable from **every branch** on origin (merge commits and empty commits excluded), counted by commit author email with one person’s multiple addresses merged; bot and automation commits are excluded.</sub>
