@@ -1,5 +1,7 @@
 # 티켓잼 프로야구 티켓 대시보드
 
+**한국어** · [日本語](README.ja.md) · [English](README.en.md)
+
 [ticketjam.jp](https://ticketjam.jp/categories/baseball) 의 NPB 리세일 티켓을 **여행 기간에 맞춰 자동으로 수집·추적**하는 로컬 대시보드입니다.
 경기별 최저가 / 중앙값 / 출품 건수를 주기적으로 갱신하고, 갱신이 쌓이면 **가격 추이 그래프**를 그려줍니다.
 
