@@ -18,22 +18,24 @@ Zero dependencies. If you have Node 18 or newer, it just runs.
 npm start           # http://localhost:4173
 ```
 
-On first launch, if no data has been collected it runs one collection automatically (about a minute), then refreshes every 10 minutes.
+On first launch, if there is no collected data, it runs one collection automatically. Subsequent refreshes use `refreshMinutes` in `config.json` (currently 10 minutes).
 To run a single collection only, use `npm run refresh`.
 
 ## Setting your trip dates
 
-`trip.start/end` in `config.json` defines the **collection window** — prices are only gathered inside it.
-The date, region, and "single ticket only" filters in the UI **filter already-collected data in the browser**, so they apply instantly; changing the collection window itself means editing `config.json` and pushing.
-Changing **start date / end date / region** at the top of the page and pressing **Apply** saves to `config.json` and re-collects immediately.
-You can also edit it directly:
+`trip.start/end` and `regions` in `config.json` define the **collection scope**. Set the dates to your trip before use.
+
+- **Local server:** edit `config.json`, then run `npm run refresh` or wait for the next scheduled collection. Restart the server for changes to `refreshMinutes` to affect its timer.
+- **GitHub Pages:** edit `config.json` on the default branch and push it. The workflow collects with the new configuration and redeploys.
+- **Both views:** date, region, and single-ticket controls only filter already-collected data. They do not update the file or expand the collection scope; there is no save-settings button in the UI.
+
+The following shows selected settings. Keep the other fields, including `teams`, and change the dates to suit your trip:
 
 ```json
 {
   "trip": { "start": "2026-08-05", "end": "2026-08-05" },
-  "ticketCount": 1,
   "regions": ["東京都", "神奈川県", "千葉県", "埼玉県"],
-  "refreshMinutes": 30,
+  "refreshMinutes": 10,
   "maxPagesPerEvent": 3,
   "requestDelayMs": 700,
   "port": 4173
@@ -44,7 +46,6 @@ You can also edit it directly:
 |---|---|
 | `trip.start/end` | Range of game dates to collect (Japan time, inclusive on both ends) |
 | `regions` | Prefecture filter. For Tokyo only, use `["東京都"]` |
-| `ticketCount` | `1` restricts to listings you can buy a single ticket from; `null` means all |
 | `refreshMinutes` | Refresh interval (minutes) for the local server. The deployed version's interval is the workflow cron |
 | `scheduleTtlHours` | TTL (hours) of the fixture-schedule cache — schedules rarely change, so they aren't refetched every time |
 | `maxPagesPerEvent` | Max pages collected per game (1 page = 100 listings) |
@@ -73,15 +74,14 @@ So they are **excluded** from the lowest/median statistics but kept in the list 
 1. Requests each team's `/tickets/{team}/battle_cards` once to get the remaining fixture schedule.
    Each game carries JSON-LD `SportsEvent` data, which gives the exact date, stadium, and prefecture.
 2. Selects only the games matching the trip window and regions, then requests `/tickets/{team}/event/{id}` **sorted by ascending price**.
-   Because of that sort, **the lowest price is always correct** even when only part of the pages are read.
+   Collection is limited by `maxPagesPerEvent`. The unrestricted minimum, median and count describe the listings collected; they can differ from the whole market when pages are truncated or requests fail.
 3. Accumulates per-game statistics (min / p25 / median / max / count) as a time series in `data/history.json`, and writes the UI data to `data/latest.json`.
 
 Game IDs are unique site-wide, so a game appearing on both the home and away team pages is merged into one entry rather than duplicated.
 
 ## Automated refresh & deployment
 
-`.github/workflows/refresh.yml` runs **every 10 minutes**, collects prices, commits the results (`data/latest.json`,
-`data/history.json`) to the repository, and deploys to GitHub Pages. No need to keep a Mac running locally.
+`.github/workflows/refresh.yml` is **scheduled every 10 minutes** to collect prices. It commits history and caches including `data/history.json`; the regenerated `data/latest.json` is included in the Pages artifact. Scheduled runs can be delayed.
 
 - Because history accumulates in the repo, price trends show up in the deployed version too
 - The deployed version is read-only — the "refresh now" button only appears when opened from the local server
@@ -124,7 +124,7 @@ Create `~/Library/LaunchAgents/com.local.ticketjam.plist` to start it automatica
 </dict></plist>
 ```
 
-Replace the `node` path with what `which node` reports, then register it with `launchctl load ~/Library/LaunchAgents/com.local.ticketjam.plist`.
+Replace the Node and working-directory paths for your machine (use `which node` for Node), then register it with `launchctl load ~/Library/LaunchAgents/com.local.ticketjam.plist`.
 
 ---
 
