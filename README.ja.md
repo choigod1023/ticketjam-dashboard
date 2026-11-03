@@ -18,23 +18,24 @@
 npm start           # http://localhost:4173
 ```
 
-初回起動時に収集データが無ければ、自動的に 1 回収集します（約 1 分）。以降は 10 分ごとに自動更新します。
+初回起動時に収集データが無ければ、自動的に 1 回収集します。以降は `config.json` の `refreshMinutes` の間隔で更新します（現在の設定は 10 分）。
 収集だけを 1 回実行したい場合は `npm run refresh`。
 
 ## 旅行日程の設定
 
-`config.json` の `trip.start/end` が **収集範囲** です。この範囲内の価格だけを集めます。
-画面上の日付・地域・「1 枚のみ」フィルタは **すでに収集済みのデータをブラウザ側で絞り込んで表示するもの** なので即時反映されますが、
-収集範囲そのものを変えるには `config.json` を編集して push する必要があります。
-ブラウザ上部の **開始日 / 終了日 / 地域** を変更して **適用** を押すと `config.json` に保存され、すぐに再収集します。
-直接編集しても構いません:
+`config.json` の `trip.start/end` と `regions` が **収集範囲** を決めます。使用前に日付を旅行期間に変更してください。
+
+- **ローカルサーバー:** `config.json` を編集し、`npm run refresh` で再収集するか次の定期更新を待ちます。`refreshMinutes` の変更をタイマーに反映するにはサーバーを再起動します。
+- **GitHub Pages:** デフォルトブランチの `config.json` を編集して push します。ワークフローが新しい設定で収集し、再デプロイします。
+- **両画面共通:** 日付・地域・1 枚フィルタは収集済みデータの表示だけを変更します。設定ファイルや収集範囲は変更せず、画面に設定保存ボタンはありません。
+
+以下は一部項目の設定例です。`teams` など他の項目は残し、日付を旅行に合わせて変更してください:
 
 ```json
 {
   "trip": { "start": "2026-08-05", "end": "2026-08-05" },
-  "ticketCount": 1,
   "regions": ["東京都", "神奈川県", "千葉県", "埼玉県"],
-  "refreshMinutes": 30,
+  "refreshMinutes": 10,
   "maxPagesPerEvent": 3,
   "requestDelayMs": 700,
   "port": 4173
@@ -45,7 +46,6 @@ npm start           # http://localhost:4173
 |---|---|
 | `trip.start/end` | 収集対象の試合日の範囲（日本時間基準、両端を含む） |
 | `regions` | 都道府県フィルタ。東京だけ見たいなら `["東京都"]` |
-| `ticketCount` | `1` なら 1 枚のみ購入可能な出品に限定。`null` なら全件 |
 | `refreshMinutes` | ローカルサーバーの更新周期（分）。デプロイ版の周期はワークフローの cron |
 | `scheduleTtlHours` | 試合日程キャッシュの寿命（時間）。日程はほぼ変わらないので毎回は取得しない |
 | `maxPagesPerEvent` | 1 試合あたりの最大収集ページ数（1 ページ = 100 件） |
@@ -74,7 +74,7 @@ npm start           # http://localhost:4173
 1. チームごとの `/tickets/{team}/battle_cards` を 1 回ずつリクエストし、残りの試合日程を取得します。
    各試合には JSON-LD の `SportsEvent` が付いているため、日付・球場・都道府県を正確に取得できます。
 2. 旅行期間 + 地域に該当する試合だけを選び、`/tickets/{team}/event/{id}` を **価格の昇順** でリクエストします。
-   ソートを掛けているので、ページを一部しか読まなくても **最安値は常に正確** です。
+   収集ページ数は `maxPagesPerEvent` で制限されます。資格制限付き出品を除く最安値・中央値・件数は収集できた出品に基づくため、ページの省略やリクエスト失敗時には市場全体と異なる場合があります。
 3. 試合ごとの統計（min / p25 / median / max / 件数）を `data/history.json` に時系列で蓄積し、
    画面用データを `data/latest.json` に書き出します。
 
@@ -82,8 +82,7 @@ npm start           # http://localhost:4173
 
 ## 自動更新 & デプロイ
 
-`.github/workflows/refresh.yml` が **10 分ごと** に動いて価格を収集し、結果（`data/latest.json`,
-`data/history.json`）をリポジトリにコミットしたうえで GitHub Pages にデプロイします。ローカルの Mac を起動しておく必要はありません。
+`.github/workflows/refresh.yml` は **10 分ごとに予約実行** され、価格を収集します。`data/history.json` などの履歴・キャッシュをコミットし、毎回生成する `data/latest.json` は Pages の配信物に含めます。予約実行が遅れる場合もあります。
 
 - 履歴がリポジトリに蓄積されるので、価格推移はデプロイ版でもそのまま見られます
 - デプロイ版は読み取り専用です — 「今すぐ更新」ボタンはローカルサーバーで開いたときだけ表示されます
@@ -126,7 +125,7 @@ data/              収集結果 — history.json（時系列、コミットさ�
 </dict></plist>
 ```
 
-`node` のパスは `which node` で確認して置き換え、`launchctl load ~/Library/LaunchAgents/com.local.ticketjam.plist` で登録します。
+`node` と作業ディレクトリのパスを自分の環境に合わせて変更し（Node は `which node` で確認）、`launchctl load ~/Library/LaunchAgents/com.local.ticketjam.plist` で登録します。
 
 ---
 
